@@ -12,7 +12,6 @@ import {
   ArrowLeft,
   ChevronRight,
   FolderOpen,
-  BrainCircuit,
 } from 'lucide-react';
 import { User, Assessment } from '../types';
 
@@ -52,8 +51,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   // Independent main menu items
   // PERUBAHAN: Audit Log hanya akan dimasukkan ke dalam array jika User adalah Admin.
-  const mainNavItems = [
-    { id: 'decision', label: 'DPO Decision Center', icon: BrainCircuit, badge: 'Executive' },
+  const mainNavItems: { id: string; label: string; icon: typeof Settings; badge?: string }[] = [
     // Menggunakan spread operator untuk memasukkan Audit Log hanya untuk Admin
     ...(isAdmin ? [{ id: 'audit', label: 'Audit Log System', icon: Receipt }] : []),
     { id: 'settings', label: 'Pengaturan', icon: Settings },

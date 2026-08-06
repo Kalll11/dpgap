@@ -1,13 +1,19 @@
-import React, { useState } from 'react';
-import { ShieldCheck, UserCheck, Lock, Mail, BadgeCheck, AlertCircle } from 'lucide-react';
-import { User } from '../types';
+import React, { useEffect, useState } from 'react';
+import { ShieldCheck, UserCheck, Lock, Mail, BadgeCheck, AlertCircle, KeyRound, RefreshCw } from 'lucide-react';
+import { fetchCaptcha } from '../api/apiClient';
 
 interface AuthPageProps {
-  onLogin: (email: string, pass: string) => Promise<void>;
-  onRegister: (fullname: string, employeeId: string, email: string, pass: string) => Promise<void>;
+  onLogin: (email: string, pass: string, captchaId: string, captchaAnswer: string) => Promise<void>;
+  onRequestOtp: (
+    fullname: string,
+    employeeId: string,
+    email: string,
+    pass: string
+  ) => Promise<{ message: string; emailSent: boolean; expiresInSeconds: number }>;
+  onRegister: (email: string, otpCode: string) => Promise<void>;
 }
 
-export const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onRegister }) => {
+export const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onRequestOtp, onRegister }) => {
   const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -16,25 +22,70 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onRegister }) => {
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Captcha (non-robot check) untuk login
+  const [captchaId, setCaptchaId] = useState('');
+  const [captchaQuestion, setCaptchaQuestion] = useState('');
+  const [captchaAnswer, setCaptchaAnswer] = useState('');
+  const [captchaLoading, setCaptchaLoading] = useState(false);
+
+  // Registrasi 2 langkah: isi form -> kirim OTP ke email -> verifikasi kode
+  const [registerStep, setRegisterStep] = useState<'form' | 'otp'>('form');
+  const [otpCode, setOtpCode] = useState('');
+  const [otpInfo, setOtpInfo] = useState('');
+
+  const loadCaptcha = async () => {
+    setCaptchaLoading(true);
+    setCaptchaAnswer('');
+    try {
+      const c = await fetchCaptcha();
+      setCaptchaId(c.captchaId);
+      setCaptchaQuestion(c.question);
+    } catch (_err) {
+      setCaptchaQuestion('');
+    } finally {
+      setCaptchaLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadCaptcha();
+  }, []);
+
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setLoading(true);
     try {
-      await onLogin(email.trim(), password);
+      await onLogin(email.trim(), password, captchaId, captchaAnswer.trim());
     } catch (err: any) {
       setErrorMsg(err.message || 'Gagal login. Periksa email dan password.');
+      loadCaptcha();
     } finally {
       setLoading(false);
     }
   };
 
-  const handleRegisterSubmit = async (e: React.FormEvent) => {
+  const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setLoading(true);
     try {
-      await onRegister(fullname.trim(), employeeId.trim(), email.trim(), password);
+      const res = await onRequestOtp(fullname.trim(), employeeId.trim(), email.trim(), password);
+      setOtpInfo(res.message);
+      setRegisterStep('otp');
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Gagal mengirim kode verifikasi.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtpSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg('');
+    setLoading(true);
+    try {
+      await onRegister(email.trim(), otpCode.trim());
     } catch (err: any) {
       setErrorMsg(err.message || 'Gagal registrasi.');
     } finally {
@@ -42,10 +93,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onRegister }) => {
     }
   };
 
-  const fillDemo = (demoEmail: string, demoPass: string) => {
-    setEmail(demoEmail);
-    setPassword(demoPass);
-    setActiveTab('login');
+  const resetRegisterFlow = () => {
+    setRegisterStep('form');
+    setOtpCode('');
+    setOtpInfo('');
+    setErrorMsg('');
   };
 
   return (
@@ -58,13 +110,13 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onRegister }) => {
       <div className="w-full max-w-md bg-slate-900/90 border border-slate-800 rounded-2xl shadow-2xl p-6 sm:p-8 backdrop-blur-xl relative z-10">
         {/* Brand Header */}
         <div className="flex items-center gap-3 mb-6">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-indigo-600 text-slate-950 font-black text-xl flex items-center justify-center shadow-lg shadow-amber-500/10">
-            DP
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-red-600 to-red-800 text-white font-black text-sm flex items-center justify-center shadow-lg shadow-red-600/30">
+            TLK
           </div>
           <div>
             <div className="flex items-center gap-2">
               <span className="font-extrabold text-lg text-white">DPGAP</span>
-              <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-bold border border-indigo-500/30">
+              <span className="text-[10px] px-2 py-0.5 rounded bg-red-500/10 text-red-400 font-bold border border-red-500/30">
                 Enterprise
               </span>
             </div>
@@ -79,6 +131,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onRegister }) => {
             onClick={() => {
               setActiveTab('login');
               setErrorMsg('');
+              loadCaptcha();
             }}
             className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
               activeTab === 'login'
@@ -93,6 +146,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onRegister }) => {
             onClick={() => {
               setActiveTab('register');
               setErrorMsg('');
+              resetRegisterFlow();
             }}
             className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
               activeTab === 'register'
@@ -147,10 +201,42 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onRegister }) => {
               </div>
             </div>
 
+            {/* Non-robot check: math captcha */}
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                Verifikasi Non-Robot
+              </label>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 flex items-center gap-2 px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800">
+                  <ShieldCheck className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                  <span className="text-xs font-mono text-slate-200 select-none">
+                    {captchaLoading ? 'Memuat...' : captchaQuestion || 'Gagal memuat captcha'}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={loadCaptcha}
+                  title="Muat ulang captcha"
+                  className="p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-400 hover:text-indigo-400 hover:border-indigo-500 transition-colors"
+                >
+                  <RefreshCw className={`w-4 h-4 ${captchaLoading ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+              <input
+                type="text"
+                inputMode="numeric"
+                required
+                value={captchaAnswer}
+                onChange={(e) => setCaptchaAnswer(e.target.value)}
+                placeholder="Masukkan hasil jawaban"
+                className="mt-2 w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-xs placeholder:text-slate-600 focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+
             <button
               type="submit"
-              disabled={loading}
-              className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-bold text-xs shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2"
+              disabled={loading || captchaLoading}
+              className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-bold text-xs shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-60"
             >
               {loading ? (
                 <span>Memproses...</span>
@@ -162,9 +248,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onRegister }) => {
               )}
             </button>
           </form>
-        ) : (
-          /* Registration Form */
-          <form onSubmit={handleRegisterSubmit} className="space-y-3.5">
+        ) : registerStep === 'form' ? (
+          /* Registration Form — Langkah 1: isi data & kirim OTP */
+          <form onSubmit={handleSendOtp} className="space-y-3.5">
             <div>
               <label className="block text-xs font-bold text-slate-300 mb-1">Nama Lengkap</label>
               <input
@@ -210,7 +296,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onRegister }) => {
                 />
               </div>
               <p className="text-[10px] text-slate-500 mt-1">
-                Khusus karyawan resmi domain <code className="text-indigo-400">@telkomhub.co.id</code> atau <code className="text-indigo-400">@telkom.co.id</code>.
+                Khusus karyawan resmi domain <code className="text-indigo-400">@telkomhub.co.id</code> atau <code className="text-indigo-400">@telkom.co.id</code>. Kode verifikasi akan dikirim ke email ini.
               </p>
             </div>
 
@@ -232,48 +318,73 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onRegister }) => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-bold text-xs shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2"
+              className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-bold text-xs shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-60"
             >
               {loading ? (
-                <span>Memproses...</span>
+                <span>Mengirim kode verifikasi...</span>
               ) : (
                 <>
-                  <UserCheck className="w-4 h-4" />
-                  <span>Daftar sebagai Assessor Karyawan</span>
+                  <Mail className="w-4 h-4" />
+                  <span>Kirim Kode Verifikasi ke Email</span>
                 </>
               )}
             </button>
           </form>
-        )}
+        ) : (
+          /* Registration Form — Langkah 2: verifikasi kode OTP dari email */
+          <form onSubmit={handleVerifyOtpSubmit} className="space-y-3.5">
+            {otpInfo && (
+              <div className="p-3 rounded-xl bg-indigo-950/60 border border-indigo-800/60 text-indigo-200 text-[11px]">
+                {otpInfo}
+              </div>
+            )}
+            <div>
+              <label className="block text-xs font-bold text-slate-300 mb-1">
+                Kode Verifikasi (6 digit)
+              </label>
+              <div className="relative">
+                <KeyRound className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  required
+                  autoFocus
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                  placeholder="123456"
+                  className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-sm tracking-[0.3em] font-mono text-center focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+              <p className="text-[10px] text-slate-500 mt-1">
+                Dikirim ke <span className="text-indigo-400">{email}</span>. Kode berlaku 5 menit.
+              </p>
+            </div>
 
-        {/* Quick Demo Access Box */}
-        <div className="mt-6 pt-4 border-t border-slate-800/80 text-center">
-          <p className="text-[11px] font-bold text-slate-400 mb-2">Akses Cepat Demo Akun Role (Akademis/KP):</p>
-          <div className="grid grid-cols-3 gap-2">
+            <button
+              type="submit"
+              disabled={loading || otpCode.length !== 6}
+              className="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white font-bold text-xs shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+            >
+              {loading ? (
+                <span>Memverifikasi...</span>
+              ) : (
+                <>
+                  <UserCheck className="w-4 h-4" />
+                  <span>Verifikasi & Selesaikan Pendaftaran</span>
+                </>
+              )}
+            </button>
+
             <button
               type="button"
-              onClick={() => fillDemo('admin@telkomhub.co.id', 'admin123')}
-              className="px-2 py-1.5 rounded-lg bg-indigo-950/80 border border-indigo-800/60 text-indigo-300 text-[11px] font-semibold hover:bg-indigo-900 transition-colors"
+              onClick={resetRegisterFlow}
+              className="w-full text-[11px] text-slate-400 hover:text-slate-200 font-semibold"
             >
-              👑 Admin
+              ← Ubah data pendaftaran / kirim ulang kode
             </button>
-            <button
-              type="button"
-              onClick={() => fillDemo('assessor@telkomhub.co.id', 'assessor123')}
-              className="px-2 py-1.5 rounded-lg bg-emerald-950/80 border border-emerald-800/60 text-emerald-300 text-[11px] font-semibold hover:bg-emerald-900 transition-colors"
-            >
-              🔍 Assessor
-            </button>
-            <button
-              type="button"
-              onClick={() => fillDemo('viewer@telkomhub.co.id', 'viewer123')}
-              className="px-2 py-1.5 rounded-lg bg-amber-950/80 border border-amber-800/60 text-amber-300 text-[11px] font-semibold hover:bg-amber-900 transition-colors"
-            >
-              👁️ Viewer
-            </button>
-          </div>
-          <p className="text-[10px] text-slate-500 mt-2">Password: <code className="text-slate-400">admin123</code> / <code className="text-slate-400">assessor123</code> / <code className="text-slate-400">viewer123</code></p>
-        </div>
+          </form>
+        )}
       </div>
     </div>
   );
