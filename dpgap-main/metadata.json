@@ -1,0 +1,8 @@
+{
+  "name": "Remix Remix DPGAP — Data Protection Gap Assessment Platform",
+  "description": "Platform Gap Assessment Pelindungan Data Berdasarkan UU PDP No. 27/2022, NIST, GDPR \u0026 Privacy by Design untuk DPO \u0026 Data Protection Division Telkom Hub",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
