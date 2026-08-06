@@ -14,7 +14,7 @@ import {
   Search,
   Filter,
 } from 'lucide-react';
-import { Assessment, Criterion, ActionStatus, User } from '../types';
+import { Assessment, Criterion, ActionStatus, User } from '../../../shared/types';
 import {
   calculatePriorityScore,
   getPriorityCategory,

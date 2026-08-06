@@ -7,7 +7,7 @@ import {
   AlertTriangle,
   Upload,
 } from 'lucide-react';
-import { Assessment, User } from '../types';
+import { Assessment, User } from '../../../shared/types';
 import { calculateOverallCompliance, calculateOverallRisk } from '../utils/scoring';
 import { parseAssessmentExcel } from '../utils/importer';
 

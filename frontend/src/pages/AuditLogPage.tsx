@@ -9,7 +9,7 @@ import {
   UserCheck,
   ShieldAlert,
 } from 'lucide-react';
-import { AuditLog, User } from '../types';
+import { AuditLog, User } from '../../../shared/types';
 
 interface AuditLogPageProps {
   logs: AuditLog[];

@@ -1,4 +1,4 @@
-import { Assessment, User, AuditLog, Criterion, Snapshot, Role } from '../types';
+import { Assessment, User, AuditLog, Criterion, Snapshot, Role } from '../../../shared/types';
 
 const API_BASE = '/api';
 
@@ -37,11 +37,11 @@ async function handleResponse<T>(res: Response, defaultErrMsg: string): Promise<
   return res.json();
 }
 
-export async function loginUser(email: string, pass: string): Promise<{ user: User; token: string }> {
+export async function loginUser(email: string, pass: string, captchaToken: string): Promise<{ user: User; token: string }> {
   const res = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password: pass }),
+    body: JSON.stringify({ email, password: pass, captchaToken }),
   });
   const data = await handleResponse<{ user: User; token: string }>(res, 'Gagal login');
   if (data.token) {
@@ -55,14 +55,24 @@ export async function registerUser(
   fullname: string,
   employeeId: string,
   email: string,
-  pass: string
-): Promise<{ user: User; token: string }> {
+  pass: string,
+  role: string
+): Promise<{ message: string }> {
   const res = await fetch(`${API_BASE}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fullname, employeeId, email, password: pass }),
+    body: JSON.stringify({ fullname, employeeId, email, password: pass, role }),
   });
-  const data = await handleResponse<{ user: User; token: string }>(res, 'Gagal mendaftar');
+  return handleResponse<{ message: string }>(res, 'Gagal mendaftar');
+}
+
+export async function verifyOtpApi(email: string, otp: string): Promise<{ user: User; token: string }> {
+  const res = await fetch(`${API_BASE}/auth/verify-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, otp }),
+  });
+  const data = await handleResponse<{ user: User; token: string }>(res, 'Gagal verifikasi OTP');
   if (data.token) {
     localStorage.setItem('dpgap_token', data.token);
     localStorage.setItem('dpgap_user', JSON.stringify(data.user));

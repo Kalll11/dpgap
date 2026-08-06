@@ -14,7 +14,7 @@ import {
   FolderOpen,
   BrainCircuit,
 } from 'lucide-react';
-import { User, Assessment } from '../types';
+import { User, Assessment } from '../../../shared/types';
 
 interface SidebarProps {
   activePage: string;

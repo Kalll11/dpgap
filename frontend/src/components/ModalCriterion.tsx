@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, FileText, CheckSquare, AlertTriangle } from 'lucide-react';
-import { Criterion, LifecycleStage, FocusArea, ActionStatus } from '../types';
+import { Criterion, LifecycleStage, FocusArea, ActionStatus } from '../../../shared/types';
 
 interface ModalCriterionProps {
   isOpen: boolean;

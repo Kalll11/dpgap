@@ -1,7 +1,7 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
-import { Assessment, AuditLog } from '../types';
+import { Assessment, AuditLog } from '../../../shared/types'
 import {
   calculateOverallCompliance,
   calculateOverallRisk,

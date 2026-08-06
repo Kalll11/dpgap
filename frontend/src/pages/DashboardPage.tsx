@@ -27,7 +27,7 @@ import {
   Flame,
   CheckSquare,
 } from 'lucide-react';
-import { Assessment } from '../types';
+import { Assessment } from '../../../shared/types';
 import {
   calculateOverallCompliance,
   calculateOverallRisk,

@@ -11,7 +11,7 @@ import {
   LabelList,
 } from 'recharts';
 import { BarChart3, Layers, ShieldCheck, Grid, Info, Filter, Settings2, CheckCircle2, AlertTriangle } from 'lucide-react';
-import { Assessment, LifecycleStage, Criterion } from '../types';
+import { Assessment, LifecycleStage, Criterion } from '../../../shared/types'
 import {
   calculatePriorityScore,
   getPriorityCategory,
@@ -20,7 +20,7 @@ import {
   getFoundationalDomains,
   setFoundationalDomains,
 } from '../utils/scoring';
-import { INITIAL_DOMAINS } from '../data/initialData';
+import { INITIAL_DOMAINS } from '../../../shared/data/initialData';
 
 interface GapMatrixPageProps {
   assessment: Assessment;

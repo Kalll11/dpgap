@@ -1,4 +1,4 @@
-import { Criterion } from '../types';
+import { Criterion } from '../../../shared/types';
 import { fetchFoundationalDomainsApi, updateFoundationalDomainsApi } from '../api/apiClient';
 
 export const MAX_GAP = 4;

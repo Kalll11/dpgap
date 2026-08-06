@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Assessment, Criterion, AuditLog, Role } from './types';
+import { User, Assessment, Criterion, AuditLog, Role } from '../../shared/types';
 import {
   fetchAssessments,
   createAssessmentApi,
@@ -12,13 +12,14 @@ import {
   updateSettingsApi,
   fetchAuditLogsApi,
   resetAuditLogsApi,
+  verifyOtpApi,
   loginUser,
   registerUser,
   fetchUsers,
   fetchCurrentUser,
   updateUserRoleApi,
 } from './api/apiClient';
-import { INITIAL_USERS, INITIAL_DOMAINS, createInitialAssessments, INITIAL_AUDIT_LOGS } from './data/initialData';
+import { INITIAL_USERS, INITIAL_DOMAINS, createInitialAssessments, INITIAL_AUDIT_LOGS } from "../../shared/data/initialData";
 import { ToastContainer, ToastMessage } from './components/Toast';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
@@ -197,28 +198,38 @@ export default function App() {
   const activeAssessment = assessments.find((a) => a.id === activeAssessmentId) || null;
   const availableDomains = INITIAL_DOMAINS;
 
-  // Handlers
-  const handleLogin = async (email: string, pass: string) => {
-    try {
-      const res = await loginUser(email, pass);
-      setCurrentUser(res.user);
-      addToast(`Selamat datang, ${res.user.fullname}! (${res.user.role})`, 'success');
-      setActivePage('assessments');
-    } catch (err: any) {
-      throw new Error(err.message || 'Gagal login. Periksa email dan password.');
-    }
-  };
+  const handleLogin = async (email: string, pass: string, captchaToken: string) => {
+  try {
+    const res = await loginUser(email, pass, captchaToken);
+    setCurrentUser(res.user);
+    addToast(`Selamat datang, ${res.user.fullname}! (${res.user.role})`, 'success');
+    setActivePage('assessments');
+  } catch (err: any) {
+    throw new Error(err.message || 'Gagal login. Periksa email dan password.');
+  }
+};
 
-  const handleRegister = async (fullname: string, employeeId: string, email: string, pass: string) => {
-    try {
-      const res = await registerUser(fullname, employeeId, email, pass);
-      setCurrentUser(res.user);
-      addToast('Registrasi karyawan berhasil! Selamat datang.', 'success');
-      setActivePage('assessments');
-    } catch (err: any) {
-      throw new Error(err.message || 'Gagal registrasi.');
-    }
-  };
+const handleRegister = async (fullname: string, employeeId: string, email: string, pass: string, role: string) => {
+  try {
+    await registerUser(fullname, employeeId, email, pass, role);
+    // Sengaja tidak setCurrentUser di sini — user baru resmi terdaftar
+    // setelah OTP diverifikasi. AuthPage otomatis pindah ke step OTP
+    // begitu promise ini resolve tanpa error (lihat handleRegisterSubmit di AuthPage.tsx).
+  } catch (err: any) {
+    throw new Error(err.message || 'Gagal registrasi.');
+  }
+};
+
+const handleVerifyOtp = async (email: string, otp: string) => {
+  try {
+    const res = await verifyOtpApi(email, otp);
+    setCurrentUser(res.user);
+    addToast(`Registrasi berhasil! Selamat datang, ${res.user.fullname}.`, 'success');
+    setActivePage('assessments');
+  } catch (err: any) {
+    throw new Error(err.message || 'Verifikasi OTP gagal.');
+  }
+};
 
   const handleLogout = () => {
     setCurrentUser(null);
@@ -488,7 +499,7 @@ export default function App() {
     return (
       <>
         <ToastContainer toasts={toasts} onDismiss={removeToast} />
-        <AuthPage onLogin={handleLogin} onRegister={handleRegister} />
+        <AuthPage onLogin={handleLogin} onRegister={handleRegister} onVerifyOtp={handleVerifyOtp} />
       </>
     );
   }

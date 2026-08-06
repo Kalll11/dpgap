@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { Assessment, Criterion, LifecycleStage, FocusArea } from '../types';
+import { Assessment, Criterion, LifecycleStage, FocusArea } from '../../../shared/types';
 
 export interface ParseExcelResult {
   assessmentName: string;

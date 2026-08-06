@@ -1,9 +1,9 @@
+import cors from 'cors';
 import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import initSqlJs, { Database } from 'sql.js';
-import { createServer as createViteServer } from 'vite';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
@@ -14,10 +14,10 @@ import {
   DEFAULT_TEMPLATE_40_CRITERIA,
   INITIAL_AUDIT_LOGS,
   createInitialAssessments,
-} from '../frontend/src/data/initialData.js';
-import { Assessment, User, AuditLog, Criterion, Snapshot, Role } from '../frontend/src/types.js';
+} from '../shared/data/initialData';
+import { Assessment, User, AuditLog, Criterion, Snapshot, Role } from '../shared/types';
 
-const PORT = 3000;
+const PORT = process.env.PORT ? Number(process.env.PORT) : 3001;
 const ALLOWED_DOMAINS = ['telkomhub.co.id', 'telkom.co.id'];
 const DB_FILE = path.join(process.cwd(), 'dpgap_db.sqlite');
 
@@ -371,6 +371,7 @@ async function startServer() {
 
   const app = express();
   app.use(express.json({ limit: '10mb' }));
+  app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
 
   // ==========================================
   // 4. API ROUTES AUTHENTICATION (NEW/MODIFIED)
@@ -569,7 +570,7 @@ async function startServer() {
     }
 
     const isBlank = templateType === 'blank';
-    const initialCriteria: Criterion[] = isBlank
+    const initialCriteria: any[] = isBlank
       ? []
       : DEFAULT_TEMPLATE_40_CRITERIA.map((item, idx) => ({
           ...item,
@@ -810,21 +811,6 @@ async function startServer() {
     addAudit(req.user?.id || 'admin', req.user?.fullname || 'Admin', 'Reset Audit Log', 'Audit log dikosongkan secara manual');
     res.json({ success: true });
   });
-
-  // Vite Middleware in dev, Static serving in production
-  if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (_req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
-  }
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`DPGAP Server running on http://0.0.0.0:${PORT}`);

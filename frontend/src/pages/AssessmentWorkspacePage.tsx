@@ -15,7 +15,7 @@ import {
   CheckCircle2,
   HelpCircle,
 } from 'lucide-react';
-import { Assessment, Criterion, LifecycleStage, FocusArea, User } from '../types';
+import { Assessment, Criterion, LifecycleStage, FocusArea, User } from '../../../shared/types';
 import {
   calculatePriorityScore,
   getPriorityCategory,

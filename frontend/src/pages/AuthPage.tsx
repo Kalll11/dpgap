@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ShieldCheck, UserCheck, Lock, Mail, BadgeCheck, AlertCircle, KeyRound, ArrowLeft } from 'lucide-react';
 import ReCAPTCHA from 'react-google-recaptcha';
-import { User } from '../types';
+import { User } from '../../../shared/types';
 
 interface AuthPageProps {
   onLogin: (email: string, pass: string, captchaToken: string) => Promise<void>;
@@ -182,11 +182,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onRegister, onVerif
             </div>
 
             {/* Google reCAPTCHA Widget */}
-            <div className="flex justify-center my-3 overflow-hidden scale-90 origin-left">
+            <div className="flex justify-center my-3">
               <ReCAPTCHA
-                sitekey="6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI" // Ganti dengan Google reCAPTCHA Site Key Anda
+                sitekey="6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI"
                 onChange={(token) => setCaptchaToken(token)}
                 theme="dark"
+                size="compact"
               />
             </div>
 
