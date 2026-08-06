@@ -7,27 +7,74 @@ import { createServer as createViteServer } from 'vite';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import nodemailer from 'nodemailer'; // TAMBAHAN: Nodemailer
 import {
   INITIAL_USERS,
   INITIAL_DOMAINS,
   DEFAULT_TEMPLATE_40_CRITERIA,
   INITIAL_AUDIT_LOGS,
   createInitialAssessments,
-} from './src/data/initialData.js';
-import { Assessment, User, AuditLog, Criterion, Snapshot, Role } from './src/types.js';
+} from '../frontend/src/data/initialData.js';
+import { Assessment, User, AuditLog, Criterion, Snapshot, Role } from '../frontend/src/types.js';
 
 const PORT = 3000;
 const ALLOWED_DOMAINS = ['telkomhub.co.id', 'telkom.co.id'];
 const DB_FILE = path.join(process.cwd(), 'dpgap_db.sqlite');
+
+// ==========================================
+// 1. SETUP KEAMANAN & ENKRIPSI AES-256
+// ==========================================
 const JWT_SECRET: string = process.env.JWT_SECRET || (() => {
   const generated = crypto.randomBytes(32).toString('hex');
   console.warn('⚠️ JWT_SECRET belum diset, pakai secret sementara. Set di .env sebelum deploy.');
   return generated;
 })();
 
-let db: Database;
+// Kunci AES harus 32 byte. Jika di .env tidak ada, buat acak sementara
+const ENCRYPTION_KEY_STRING = process.env.ENCRYPTION_KEY || crypto.randomBytes(32).toString('hex');
+const ENCRYPTION_KEY = Buffer.from(ENCRYPTION_KEY_STRING.padEnd(32, '0').slice(0, 32), 'utf8');
+const ALGORITHM = 'aes-256-cbc';
 
-// State in memory synced with SQLite
+// Fungsi Enkripsi (Untuk database)
+function encryptAES(text: string): string {
+  if (!text) return text;
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv(ALGORITHM, ENCRYPTION_KEY, iv);
+  let encrypted = cipher.update(text, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  return `${iv.toString('hex')}:${encrypted}`;
+}
+
+// Fungsi Dekripsi (Untuk ditarik ke memory/frontend)
+function decryptAES(hash: string): string {
+  if (!hash || !hash.includes(':')) return hash; // Fallback jika data lama belum dienkripsi
+  try {
+    const [ivHex, encryptedText] = hash.split(':');
+    const iv = Buffer.from(ivHex, 'hex');
+    const decipher = crypto.createDecipheriv(ALGORITHM, ENCRYPTION_KEY, iv);
+    let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+  } catch (error) {
+    return hash; // Jika gagal dekripsi, kembalikan teks aslinya
+  }
+}
+
+// ==========================================
+// 2. SETUP NODEMAILER & OTP STORE
+// ==========================================
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+});
+
+// Menyimpan OTP sementara di memory (expired dalam 15 menit)
+const pendingOtps = new Map<string, { otp: string, userData: any, expiresAt: number }>();
+
+// ==========================================
+// 3. DATABASE STATE (Memory)
+// ==========================================
+let db: Database;
 let usersState: User[] = [];
 let assessmentsState: Assessment[] = [];
 let auditLogsState: AuditLog[] = [];
@@ -39,12 +86,10 @@ let foundationalDomainsState: string[] = [
   'Incident Response',
 ];
 
-// Extended Request with Auth User
 interface AuthRequest extends express.Request {
   user?: User;
 }
 
-// Default passwords map for initial seed users
 function resolveSeedPassword(envVar: string, email: string): string {
   const fromEnv = process.env[envVar];
   if (fromEnv) return fromEnv;
@@ -52,6 +97,7 @@ function resolveSeedPassword(envVar: string, email: string): string {
   console.warn(`⚠️ ${envVar} belum diset — password sementara ${email}: ${generated}`);
   return generated;
 }
+
 const DEFAULT_PASSWORDS: Record<string, string> = {
   'admin@telkomhub.co.id': resolveSeedPassword('SEED_ADMIN_PASSWORD', 'admin@telkomhub.co.id'),
   'assessor@telkomhub.co.id': resolveSeedPassword('SEED_ASSESSOR_PASSWORD', 'assessor@telkomhub.co.id'),
@@ -83,7 +129,6 @@ async function initDatabase() {
     db = new SQL.Database();
   }
 
-  // Schema creation
   db.run(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
@@ -120,20 +165,15 @@ async function initDatabase() {
     );
   `);
 
-  // Migrate users table if password_hash column is missing from previous versions
-  try {
-    db.run('ALTER TABLE users ADD COLUMN password_hash TEXT');
-  } catch (_e) {
-    // Column already exists
-  }
+  try { db.run('ALTER TABLE users ADD COLUMN password_hash TEXT'); } catch (_e) {}
 
-  // Load or Seed Users
+  // Load Users (DEKRIPSI SAAT DIBACA DARI SQLITE KE MEMORY)
   const resUsers = db.exec('SELECT * FROM users');
   if (resUsers.length > 0 && resUsers[0].values.length > 0) {
     usersState = resUsers[0].values.map((row: any) => ({
       id: row[0],
-      fullname: row[1],
-      employeeId: row[2],
+      fullname: decryptAES(row[1]), // DEKRIPSI
+      employeeId: decryptAES(row[2]), // DEKRIPSI
       email: row[3],
       role: row[4],
       createdAt: row[5],
@@ -147,7 +187,7 @@ async function initDatabase() {
     persistUsers();
   }
 
-  // Load or Seed Assessments
+  // Load Assessments
   const resAssess = db.exec('SELECT * FROM assessments ORDER BY updated_at DESC');
   if (resAssess.length > 0 && resAssess[0].values.length > 0) {
     assessmentsState = resAssess[0].values.map((row: any) => ({
@@ -167,12 +207,10 @@ async function initDatabase() {
     persistAssessments();
   }
 
-  // Load or Seed Settings
+  // Load Settings
   const resSettings = db.exec('SELECT value_json FROM settings WHERE key = "audit_retention"');
   if (resSettings.length > 0 && resSettings[0].values.length > 0) {
-    try {
-      auditRetentionMonths = JSON.parse(resSettings[0].values[0][0] as string);
-    } catch (_) {}
+    try { auditRetentionMonths = JSON.parse(resSettings[0].values[0][0] as string); } catch (_) {}
   } else {
     db.run('INSERT OR REPLACE INTO settings VALUES (?, ?)', ['audit_retention', JSON.stringify(auditRetentionMonths)]);
   }
@@ -187,7 +225,7 @@ async function initDatabase() {
     db.run('INSERT OR REPLACE INTO settings VALUES (?, ?)', ['foundational_domains', JSON.stringify(foundationalDomainsState)]);
   }
 
-  // Load or Seed Audit Logs
+  // Load Audit Logs
   const resLogs = db.exec('SELECT * FROM audit_logs ORDER BY timestamp DESC');
   if (resLogs.length > 0 && resLogs[0].values.length > 0) {
     auditLogsState = resLogs[0].values.map((row: any) => ({
@@ -209,7 +247,15 @@ async function initDatabase() {
 function persistUsers() {
   db.run('DELETE FROM users');
   const stmt = db.prepare('INSERT INTO users VALUES (?, ?, ?, ?, ?, ?, ?)');
-  usersState.forEach((u) => stmt.run([u.id, u.fullname, u.employeeId, u.email, u.role, u.createdAt, u.passwordHash || '']));
+  usersState.forEach((u) => stmt.run([
+    u.id, 
+    encryptAES(u.fullname), // ENKRIPSI
+    encryptAES(u.employeeId), // ENKRIPSI
+    u.email, 
+    u.role, 
+    u.createdAt, 
+    u.passwordHash || ''
+  ]));
   stmt.free();
   saveDatabase();
 }
@@ -259,7 +305,6 @@ function addAudit(userId: string, userName: string, action: string, detail: stri
   persistAuditLogs();
 }
 
-// Authentication Middleware
 function authenticateToken(req: AuthRequest, res: express.Response, next: express.NextFunction) {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -284,7 +329,6 @@ function authenticateToken(req: AuthRequest, res: express.Response, next: expres
   }
 }
 
-// RBAC Middleware
 function requireRoles(...allowedRoles: Role[]) {
   return (req: AuthRequest, res: express.Response, next: express.NextFunction) => {
     if (!req.user || !allowedRoles.includes(req.user.role)) {
@@ -297,13 +341,12 @@ function requireRoles(...allowedRoles: Role[]) {
   };
 }
 
-// Rate limiter for Auth endpoints
 const authAttemptsMap = new Map<string, { count: number; resetAt: number }>();
 
 function rateLimitAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
   const ip = (req.ip || req.socket.remoteAddress || 'unknown') as string;
   const now = Date.now();
-  const windowMs = 15 * 60 * 1000; // 15 minutes
+  const windowMs = 15 * 60 * 1000;
   const maxAttempts = 20;
 
   const current = authAttemptsMap.get(ip);
@@ -321,7 +364,6 @@ function rateLimitAuth(req: express.Request, res: express.Response, next: expres
   next();
 }
 
-// Helper email validator
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 async function startServer() {
@@ -330,14 +372,24 @@ async function startServer() {
   const app = express();
   app.use(express.json({ limit: '10mb' }));
 
-  // API Routes
-  // 1. Auth & Users
+  // ==========================================
+  // 4. API ROUTES AUTHENTICATION (NEW/MODIFIED)
+  // ==========================================
+  
+  // LOGIN (DITAMBAH CAPTCHA)
   app.post('/api/auth/login', rateLimitAuth, (req, res) => {
-    const { email, password } = req.body;
+    const { email, password, captchaToken } = req.body;
     if (!email || !password) {
       res.status(400).json({ error: 'Email dan password wajib diisi' });
       return;
     }
+    
+    // Validasi Captcha
+    if (!captchaToken) {
+      res.status(400).json({ error: 'Harap selesaikan verifikasi Captcha.' }); 
+      return;
+    }
+    // Simulasi verifikasi captcha ke server Google (Implementasi riil butuh Axios/Fetch ke Google)
 
     if (!EMAIL_REGEX.test(email)) {
       res.status(400).json({ error: 'Format email tidak valid' });
@@ -360,28 +412,26 @@ async function startServer() {
     res.json({ user: sanitizeUser(user), token });
   });
 
-  app.post('/api/auth/register', rateLimitAuth, (req, res) => {
-    const { fullname, employeeId, email, password } = req.body;
+  // REGISTER (DITAMBAH KIRIM EMAIL OTP & ROLE)
+  app.post('/api/auth/register', rateLimitAuth, async (req, res) => {
+    const { fullname, employeeId, email, password, role } = req.body;
+    
     if (!fullname || !employeeId || !email || !password) {
-      res.status(400).json({ error: 'Seluruh kolom pendaftaran wajib diisi' });
+      res.status(400).json({ error: 'Semua kolom wajib diisi' });
       return;
     }
-
     if (!EMAIL_REGEX.test(email)) {
       res.status(400).json({ error: 'Format email tidak valid' });
       return;
     }
-
     if (typeof password !== 'string' || password.length < 6) {
-      res.status(400).json({ error: 'Password minimal terdiri dari 6 karakter' });
+      res.status(400).json({ error: 'Password minimal 6 karakter' });
       return;
     }
 
     const domain = email.split('@')[1]?.toLowerCase();
     if (!domain || !ALLOWED_DOMAINS.includes(domain)) {
-      res.status(403).json({
-        error: `Registrasi khusus karyawan resmi Telkom Hub dengan domain: @${ALLOWED_DOMAINS.join(', @')}`,
-      });
+      res.status(403).json({ error: `Registrasi khusus domain: @${ALLOWED_DOMAINS.join(', @')}` });
       return;
     }
 
@@ -390,27 +440,56 @@ async function startServer() {
       return;
     }
 
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = Date.now() + 15 * 60 * 1000; // 15 Menit
     const passwordHash = bcrypt.hashSync(password, 10);
+    
+    pendingOtps.set(email.toLowerCase(), { 
+      otp: otpCode, 
+      userData: { fullname, employeeId, email, role: role || 'Assessor', passwordHash }, 
+      expiresAt 
+    });
+
+    try {
+      await transporter.sendMail({
+        from: '"DPGAP Telkom Hub" <no-reply@dpgap.com>',
+        to: email,
+        subject: 'Kode Autentikasi Pendaftaran DPGAP',
+        html: `<h2>Halo ${fullname},</h2><p>Kode OTP Anda: <strong style="font-size:24px;">${otpCode}</strong></p><p>Masukkan kode ini di aplikasi untuk memverifikasi pendaftaran Anda.</p>`
+      });
+      res.status(200).json({ message: 'Kode OTP telah dikirim ke email Anda.' });
+    } catch (err: any) {
+      res.status(500).json({ error: 'Gagal mengirim email OTP: Periksa kredensial email di .env' });
+    }
+  });
+
+  // VERIFIKASI OTP (MENGUBAH STATE & DB)
+  app.post('/api/auth/verify-otp', rateLimitAuth, (req, res) => {
+    const { email, otp } = req.body;
+    const pending = pendingOtps.get(email.toLowerCase());
+
+    if (!pending || pending.otp !== otp || Date.now() > pending.expiresAt) {
+      res.status(400).json({ error: 'OTP salah atau sudah kadaluarsa.' });
+      return;
+    }
+
     const newUser: User = {
       id: `u-${Date.now()}`,
-      fullname,
-      employeeId,
-      email,
-      role: 'Assessor', // default role
       createdAt: new Date().toISOString(),
-      passwordHash,
+      ...pending.userData,
     };
 
     usersState.push(newUser);
-    persistUsers();
+    persistUsers(); // Akan otomatis mengenkripsi AES di dalam fungsi ini
+    pendingOtps.delete(email.toLowerCase());
 
     const token = jwt.sign(
       { id: newUser.id, email: newUser.email, role: newUser.role, fullname: newUser.fullname },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
-
-    addAudit(newUser.id, newUser.fullname, 'Registrasi Karyawan', `Karyawan baru terdaftar: ${fullname} (${employeeId})`);
+    
+    addAudit(newUser.id, newUser.fullname, 'Registrasi Karyawan', `Karyawan baru terdaftar: ${newUser.fullname} (${newUser.employeeId})`);
     res.status(201).json({ user: sanitizeUser(newUser), token });
   });
 
@@ -428,9 +507,6 @@ async function startServer() {
       res.status(401).json({ error: 'Tidak diautentikasi' });
       return;
     }
-
-    // Viewer role has been removed — Admin and Assessor have equal standing
-    // and both receive complete employee metadata.
     res.json(usersState.map(sanitizeUser));
   });
 
@@ -450,7 +526,6 @@ async function startServer() {
       return;
     }
 
-    // Protection against leaving zero active Admins in the system
     if (user.role === 'Admin' && role !== 'Admin') {
       const remainingAdmins = usersState.filter((u) => u.role === 'Admin' && u.id !== id);
       if (remainingAdmins.length === 0) {
