@@ -14,6 +14,7 @@ import {
   resetAuditLogsApi,
   loginUser,
   registerUser,
+  requestRegisterOtp,
   fetchUsers,
   fetchCurrentUser,
   updateUserRoleApi,
@@ -198,9 +199,9 @@ export default function App() {
   const availableDomains = INITIAL_DOMAINS;
 
   // Handlers
-  const handleLogin = async (email: string, pass: string) => {
+  const handleLogin = async (email: string, pass: string, captchaId: string, captchaAnswer: string) => {
     try {
-      const res = await loginUser(email, pass);
+      const res = await loginUser(email, pass, captchaId, captchaAnswer);
       setCurrentUser(res.user);
       addToast(`Selamat datang, ${res.user.fullname}! (${res.user.role})`, 'success');
       setActivePage('assessments');
@@ -209,9 +210,19 @@ export default function App() {
     }
   };
 
-  const handleRegister = async (fullname: string, employeeId: string, email: string, pass: string) => {
+  const handleRequestRegisterOtp = async (fullname: string, employeeId: string, email: string, pass: string) => {
     try {
-      const res = await registerUser(fullname, employeeId, email, pass);
+      const res = await requestRegisterOtp(fullname, employeeId, email, pass);
+      addToast(res.message, res.emailSent ? 'success' : 'info');
+      return res;
+    } catch (err: any) {
+      throw new Error(err.message || 'Gagal mengirim kode verifikasi.');
+    }
+  };
+
+  const handleRegister = async (email: string, otpCode: string) => {
+    try {
+      const res = await registerUser(email, otpCode);
       setCurrentUser(res.user);
       addToast('Registrasi karyawan berhasil! Selamat datang.', 'success');
       setActivePage('assessments');
@@ -488,7 +499,7 @@ export default function App() {
     return (
       <>
         <ToastContainer toasts={toasts} onDismiss={removeToast} />
-        <AuthPage onLogin={handleLogin} onRegister={handleRegister} />
+        <AuthPage onLogin={handleLogin} onRequestOtp={handleRequestRegisterOtp} onRegister={handleRegister} />
       </>
     );
   }

@@ -7,6 +7,7 @@ import { createServer as createViteServer } from 'vite';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import nodemailer from 'nodemailer';
 import {
   INITIAL_USERS,
   INITIAL_DOMAINS,
@@ -24,6 +25,82 @@ const JWT_SECRET: string = process.env.JWT_SECRET || (() => {
   console.warn('⚠️ JWT_SECRET belum diset, pakai secret sementara. Set di .env sebelum deploy.');
   return generated;
 })();
+
+// ====== Enkripsi Database (AES-256-GCM) ======
+// File dpgap_db.sqlite dienkripsi secara utuh di disk. Format file terenkripsi:
+// [12 byte MAGIC "DPGAPENCv1__"][12 byte IV][16 byte AuthTag][ciphertext...]
+const ENC_MAGIC = Buffer.from('DPGAPENCv1__', 'utf8'); // 12 bytes
+const DB_ENCRYPTION_KEY: Buffer = (() => {
+  const fromEnv = process.env.DB_ENCRYPTION_KEY;
+  if (fromEnv && /^[0-9a-fA-F]{64}$/.test(fromEnv)) {
+    return Buffer.from(fromEnv, 'hex');
+  }
+  const generated = crypto.randomBytes(32);
+  console.warn(
+    '⚠️ DB_ENCRYPTION_KEY belum diset (atau formatnya salah, harus 64 karakter hex). ' +
+      'Memakai kunci enkripsi sementara — data TIDAK BISA dibuka lagi setelah server restart. ' +
+      'Generate dengan `openssl rand -hex 32` dan simpan permanen di .env sebelum deploy.'
+  );
+  return generated;
+})();
+
+function encryptDbBuffer(plain: Buffer): Buffer {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', DB_ENCRYPTION_KEY, iv);
+  const ciphertext = Buffer.concat([cipher.update(plain), cipher.final()]);
+  const authTag = cipher.getAuthTag();
+  return Buffer.concat([ENC_MAGIC, iv, authTag, ciphertext]);
+}
+
+function decryptDbBuffer(fileBuf: Buffer): Buffer {
+  const iv = fileBuf.subarray(12, 24);
+  const authTag = fileBuf.subarray(24, 40);
+  const ciphertext = fileBuf.subarray(40);
+  const decipher = crypto.createDecipheriv('aes-256-gcm', DB_ENCRYPTION_KEY, iv);
+  decipher.setAuthTag(authTag);
+  return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+}
+
+function isEncryptedDbFile(fileBuf: Buffer): boolean {
+  return fileBuf.length > 40 && fileBuf.subarray(0, 12).equals(ENC_MAGIC);
+}
+
+// ====== Email (SMTP via nodemailer) ======
+const SMTP_CONFIGURED = !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+const mailTransporter = SMTP_CONFIGURED
+  ? nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT) || 587,
+      secure: process.env.SMTP_SECURE === 'true',
+      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+    })
+  : null;
+
+if (!SMTP_CONFIGURED) {
+  console.warn(
+    '⚠️ SMTP belum dikonfigurasi (SMTP_HOST/SMTP_USER/SMTP_PASS kosong). ' +
+      'Email (OTP & notifikasi) tidak akan benar-benar terkirim — kode OTP akan ditampilkan di log server sebagai gantinya.'
+  );
+}
+
+async function sendEmail(to: string, subject: string, html: string, fallbackLogLabel: string): Promise<boolean> {
+  if (!mailTransporter) {
+    console.warn(`✉️  [EMAIL TIDAK DIKIRIM - SMTP belum diset] Tujuan: ${to} | ${fallbackLogLabel}`);
+    return false;
+  }
+  try {
+    await mailTransporter.sendMail({
+      from: process.env.SMTP_FROM || 'DPGAP Telkom Hub <no-reply@telkomhub.co.id>',
+      to,
+      subject,
+      html,
+    });
+    return true;
+  } catch (err) {
+    console.error(`✉️  Gagal mengirim email ke ${to}:`, err);
+    return false;
+  }
+}
 
 let db: Database;
 
@@ -66,8 +143,9 @@ function saveDatabase() {
   if (db) {
     try {
       const data = db.export();
-      const buffer = Buffer.from(data);
-      fs.writeFileSync(DB_FILE, buffer);
+      const plainBuffer = Buffer.from(data);
+      const encryptedBuffer = encryptDbBuffer(plainBuffer);
+      fs.writeFileSync(DB_FILE, encryptedBuffer);
     } catch (err) {
       console.error('Error saving SQLite database:', err);
     }
@@ -77,8 +155,23 @@ function saveDatabase() {
 async function initDatabase() {
   const SQL = await initSqlJs();
   if (fs.existsSync(DB_FILE)) {
-    const filebuffer = fs.readFileSync(DB_FILE);
-    db = new SQL.Database(filebuffer);
+    const fileBuffer = fs.readFileSync(DB_FILE);
+    if (isEncryptedDbFile(fileBuffer)) {
+      try {
+        const plainBuffer = decryptDbBuffer(fileBuffer);
+        db = new SQL.Database(plainBuffer);
+      } catch (err) {
+        throw new Error(
+          '❌ Gagal mendekripsi dpgap_db.sqlite. DB_ENCRYPTION_KEY di .env tidak cocok dengan kunci yang ' +
+            'dipakai saat data ini disimpan. Pastikan DB_ENCRYPTION_KEY sama persis dengan sebelumnya.'
+        );
+      }
+    } else {
+      // File lama belum terenkripsi (migrasi dari versi sebelumnya) — muat apa adanya,
+      // lalu akan otomatis dienkripsi pada penyimpanan (saveDatabase) berikutnya.
+      console.warn('⚠️ dpgap_db.sqlite belum terenkripsi, akan dienkripsi otomatis (AES-256-GCM) pada penyimpanan berikutnya.');
+      db = new SQL.Database(fileBuffer);
+    }
   } else {
     db = new SQL.Database();
   }
@@ -324,6 +417,119 @@ function rateLimitAuth(req: express.Request, res: express.Response, next: expres
 // Helper email validator
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// ====== Registrasi via OTP Email (autentikasi non-robot) ======
+interface PendingRegistration {
+  fullname: string;
+  employeeId: string;
+  email: string;
+  passwordHash: string;
+  otpHash: string;
+  attempts: number;
+  expiresAt: number;
+}
+const pendingRegistrations = new Map<string, PendingRegistration>(); // key: email lowercase
+const OTP_TTL_MS = 5 * 60 * 1000; // 5 menit
+const OTP_MAX_ATTEMPTS = 5;
+
+function generateOtpCode(): string {
+  return crypto.randomInt(0, 1_000_000).toString().padStart(6, '0');
+}
+
+function hashOtp(code: string, email: string): string {
+  return crypto.createHash('sha256').update(`${code}:${email.toLowerCase()}`).digest('hex');
+}
+
+// ====== CAPTCHA math sederhana (non-robot check untuk login) ======
+interface CaptchaEntry {
+  answer: number;
+  expiresAt: number;
+}
+const captchaStore = new Map<string, CaptchaEntry>();
+const CAPTCHA_TTL_MS = 5 * 60 * 1000; // 5 menit
+
+function createCaptcha(): { captchaId: string; question: string } {
+  const a = crypto.randomInt(1, 10);
+  const b = crypto.randomInt(1, 10);
+  const useAdd = crypto.randomInt(0, 2) === 0;
+  const answer = useAdd ? a + b : a + b + 3; // keep it trivially simple but non-guessable format-wise
+  const question = useAdd ? `${a} + ${b}` : `${a} + ${b} + 3`;
+  const captchaId = crypto.randomBytes(16).toString('hex');
+  captchaStore.set(captchaId, { answer, expiresAt: Date.now() + CAPTCHA_TTL_MS });
+  return { captchaId, question: `${question} = ?` };
+}
+
+function verifyAndConsumeCaptcha(captchaId: string | undefined, answer: any): { ok: boolean; error?: string } {
+  if (!captchaId || answer === undefined || answer === null || answer === '') {
+    return { ok: false, error: 'Verifikasi captcha wajib diisi.' };
+  }
+  const entry = captchaStore.get(captchaId);
+  captchaStore.delete(captchaId); // one-time use, regardless of outcome
+  if (!entry) {
+    return { ok: false, error: 'Captcha tidak valid atau sudah kedaluwarsa. Silakan muat ulang captcha.' };
+  }
+  if (Date.now() > entry.expiresAt) {
+    return { ok: false, error: 'Captcha sudah kedaluwarsa. Silakan muat ulang captcha.' };
+  }
+  const numericAnswer = typeof answer === 'number' ? answer : parseInt(String(answer), 10);
+  if (Number.isNaN(numericAnswer) || numericAnswer !== entry.answer) {
+    return { ok: false, error: 'Jawaban captcha salah. Silakan coba lagi.' };
+  }
+  return { ok: true };
+}
+
+// Cleanup periodik untuk entri OTP & captcha yang kedaluwarsa
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, val] of pendingRegistrations) {
+    if (now > val.expiresAt) pendingRegistrations.delete(key);
+  }
+  for (const [key, val] of captchaStore) {
+    if (now > val.expiresAt) captchaStore.delete(key);
+  }
+}, 60 * 1000);
+
+function otpEmailHtml(fullname: string, code: string): string {
+  return `
+    <div style="font-family:sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#4338ca">DPGAP · Telkom Hub</h2>
+      <p>Halo <b>${fullname}</b>,</p>
+      <p>Gunakan kode verifikasi berikut untuk menyelesaikan pendaftaran akun DPGAP Anda:</p>
+      <p style="font-size:28px;font-weight:bold;letter-spacing:6px;background:#eef2ff;color:#3730a3;padding:12px 16px;border-radius:8px;text-align:center">${code}</p>
+      <p>Kode berlaku selama 5 menit. Jangan bagikan kode ini kepada siapa pun, termasuk pihak yang mengaku sebagai admin.</p>
+      <p style="color:#64748b;font-size:12px">Jika Anda tidak merasa melakukan pendaftaran ini, abaikan email ini.</p>
+    </div>`;
+}
+
+function welcomeEmailHtml(fullname: string, employeeId: string, email: string): string {
+  return `
+    <div style="font-family:sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#4338ca">DPGAP · Telkom Hub</h2>
+      <p>Halo <b>${fullname}</b>,</p>
+      <p>Pendaftaran akun DPGAP Anda berhasil diverifikasi. Berikut ringkasan akun Anda:</p>
+      <ul>
+        <li>Nama: ${fullname}</li>
+        <li>ID Karyawan: ${employeeId}</li>
+        <li>Email: ${email}</li>
+        <li>Role awal: Assessor</li>
+      </ul>
+      <p>Anda sekarang dapat masuk ke platform DPGAP menggunakan email dan password yang telah didaftarkan.</p>
+    </div>`;
+}
+
+function adminNotifyEmailHtml(fullname: string, employeeId: string, email: string): string {
+  return `
+    <div style="font-family:sans-serif;max-width:480px;margin:auto">
+      <h2 style="color:#4338ca">DPGAP · Notifikasi Pendaftaran Karyawan Baru</h2>
+      <p>Seorang karyawan baru saja terdaftar di sistem DPGAP:</p>
+      <ul>
+        <li>Nama: ${fullname}</li>
+        <li>ID Karyawan: ${employeeId}</li>
+        <li>Email: ${email}</li>
+        <li>Role awal: Assessor</li>
+      </ul>
+    </div>`;
+}
+
 async function startServer() {
   await initDatabase();
 
@@ -332,8 +538,21 @@ async function startServer() {
 
   // API Routes
   // 1. Auth & Users
+
+  // Captcha non-robot untuk login
+  app.get('/api/auth/captcha', (_req, res) => {
+    res.json(createCaptcha());
+  });
+
   app.post('/api/auth/login', rateLimitAuth, (req, res) => {
-    const { email, password } = req.body;
+    const { email, password, captchaId, captchaAnswer } = req.body;
+
+    const captchaCheck = verifyAndConsumeCaptcha(captchaId, captchaAnswer);
+    if (!captchaCheck.ok) {
+      res.status(400).json({ error: captchaCheck.error });
+      return;
+    }
+
     if (!email || !password) {
       res.status(400).json({ error: 'Email dan password wajib diisi' });
       return;
@@ -360,7 +579,8 @@ async function startServer() {
     res.json({ user: sanitizeUser(user), token });
   });
 
-  app.post('/api/auth/register', rateLimitAuth, (req, res) => {
+  // Langkah 1 pendaftaran: validasi data & kirim kode OTP ke email karyawan
+  app.post('/api/auth/register/otp', rateLimitAuth, async (req, res) => {
     const { fullname, employeeId, email, password } = req.body;
     if (!fullname || !employeeId || !email || !password) {
       res.status(400).json({ error: 'Seluruh kolom pendaftaran wajib diisi' });
@@ -390,19 +610,87 @@ async function startServer() {
       return;
     }
 
-    const passwordHash = bcrypt.hashSync(password, 10);
-    const newUser: User = {
-      id: `u-${Date.now()}`,
+    const emailKey = email.toLowerCase();
+    const code = generateOtpCode();
+    pendingRegistrations.set(emailKey, {
       fullname,
       employeeId,
       email,
+      passwordHash: bcrypt.hashSync(password, 10),
+      otpHash: hashOtp(code, email),
+      attempts: 0,
+      expiresAt: Date.now() + OTP_TTL_MS,
+    });
+
+    const sent = await sendEmail(
+      email,
+      'Kode Verifikasi Pendaftaran DPGAP',
+      otpEmailHtml(fullname, code),
+      `Kode OTP registrasi untuk ${email}: ${code}`
+    );
+
+    res.status(200).json({
+      message: sent
+        ? 'Kode verifikasi telah dikirim ke email Anda.'
+        : 'Kode verifikasi dibuat, namun email tidak dapat dikirim (SMTP belum dikonfigurasi). Cek log server.',
+      emailSent: sent,
+      expiresInSeconds: OTP_TTL_MS / 1000,
+    });
+  });
+
+  // Langkah 2 pendaftaran: verifikasi kode OTP lalu buat akun
+  app.post('/api/auth/register', rateLimitAuth, async (req, res) => {
+    const { email, otpCode } = req.body;
+    if (!email || !otpCode) {
+      res.status(400).json({ error: 'Email dan kode verifikasi wajib diisi' });
+      return;
+    }
+
+    const emailKey = String(email).toLowerCase();
+    const pending = pendingRegistrations.get(emailKey);
+    if (!pending) {
+      res.status(400).json({ error: 'Sesi pendaftaran tidak ditemukan atau sudah kedaluwarsa. Silakan minta kode baru.' });
+      return;
+    }
+
+    if (Date.now() > pending.expiresAt) {
+      pendingRegistrations.delete(emailKey);
+      res.status(400).json({ error: 'Kode verifikasi sudah kedaluwarsa. Silakan minta kode baru.' });
+      return;
+    }
+
+    pending.attempts += 1;
+    if (pending.attempts > OTP_MAX_ATTEMPTS) {
+      pendingRegistrations.delete(emailKey);
+      res.status(429).json({ error: 'Terlalu banyak percobaan kode salah. Silakan minta kode baru.' });
+      return;
+    }
+
+    if (hashOtp(String(otpCode).trim(), pending.email) !== pending.otpHash) {
+      res.status(400).json({ error: `Kode verifikasi salah. Sisa percobaan: ${OTP_MAX_ATTEMPTS - pending.attempts}.` });
+      return;
+    }
+
+    // Cek ulang duplikasi email (jaga-jaga race condition)
+    if (usersState.some((u) => u.email.toLowerCase() === emailKey)) {
+      pendingRegistrations.delete(emailKey);
+      res.status(409).json({ error: 'Email sudah terdaftar. Silakan login.' });
+      return;
+    }
+
+    const newUser: User = {
+      id: `u-${Date.now()}`,
+      fullname: pending.fullname,
+      employeeId: pending.employeeId,
+      email: pending.email,
       role: 'Assessor', // default role
       createdAt: new Date().toISOString(),
-      passwordHash,
+      passwordHash: pending.passwordHash,
     };
 
     usersState.push(newUser);
     persistUsers();
+    pendingRegistrations.delete(emailKey);
 
     const token = jwt.sign(
       { id: newUser.id, email: newUser.email, role: newUser.role, fullname: newUser.fullname },
@@ -410,7 +698,24 @@ async function startServer() {
       { expiresIn: '24h' }
     );
 
-    addAudit(newUser.id, newUser.fullname, 'Registrasi Karyawan', `Karyawan baru terdaftar: ${fullname} (${employeeId})`);
+    addAudit(newUser.id, newUser.fullname, 'Registrasi Karyawan', `Karyawan baru terdaftar: ${newUser.fullname} (${newUser.employeeId})`);
+
+    // Notifikasi email (tidak menghalangi response jika gagal terkirim)
+    sendEmail(
+      newUser.email,
+      'Pendaftaran DPGAP Berhasil',
+      welcomeEmailHtml(newUser.fullname, newUser.employeeId, newUser.email),
+      `Notifikasi selamat datang untuk ${newUser.email}`
+    ).catch(() => {});
+    if (process.env.NOTIFY_ADMIN_EMAIL) {
+      sendEmail(
+        process.env.NOTIFY_ADMIN_EMAIL,
+        'Notifikasi: Karyawan Baru Mendaftar di DPGAP',
+        adminNotifyEmailHtml(newUser.fullname, newUser.employeeId, newUser.email),
+        `Notifikasi admin: pendaftaran baru ${newUser.email}`
+      ).catch(() => {});
+    }
+
     res.status(201).json({ user: sanitizeUser(newUser), token });
   });
 

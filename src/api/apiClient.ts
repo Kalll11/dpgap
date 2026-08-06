@@ -37,11 +37,21 @@ async function handleResponse<T>(res: Response, defaultErrMsg: string): Promise<
   return res.json();
 }
 
-export async function loginUser(email: string, pass: string): Promise<{ user: User; token: string }> {
+export async function fetchCaptcha(): Promise<{ captchaId: string; question: string }> {
+  const res = await fetch(`${API_BASE}/auth/captcha`);
+  return handleResponse<{ captchaId: string; question: string }>(res, 'Gagal memuat captcha');
+}
+
+export async function loginUser(
+  email: string,
+  pass: string,
+  captchaId: string,
+  captchaAnswer: string
+): Promise<{ user: User; token: string }> {
   const res = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password: pass }),
+    body: JSON.stringify({ email, password: pass, captchaId, captchaAnswer }),
   });
   const data = await handleResponse<{ user: User; token: string }>(res, 'Gagal login');
   if (data.token) {
@@ -51,16 +61,31 @@ export async function loginUser(email: string, pass: string): Promise<{ user: Us
   return data;
 }
 
-export async function registerUser(
+export async function requestRegisterOtp(
   fullname: string,
   employeeId: string,
   email: string,
   pass: string
+): Promise<{ message: string; emailSent: boolean; expiresInSeconds: number }> {
+  const res = await fetch(`${API_BASE}/auth/register/otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fullname, employeeId, email, password: pass }),
+  });
+  return handleResponse<{ message: string; emailSent: boolean; expiresInSeconds: number }>(
+    res,
+    'Gagal mengirim kode verifikasi'
+  );
+}
+
+export async function registerUser(
+  email: string,
+  otpCode: string
 ): Promise<{ user: User; token: string }> {
   const res = await fetch(`${API_BASE}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fullname, employeeId, email, password: pass }),
+    body: JSON.stringify({ email, otpCode }),
   });
   const data = await handleResponse<{ user: User; token: string }>(res, 'Gagal mendaftar');
   if (data.token) {
