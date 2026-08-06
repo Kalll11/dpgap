@@ -248,7 +248,7 @@ export const ModalCriterion: React.FC<ModalCriterionProps> = ({
             </div>
           </div>
 
-          {/* Target & Override Level */}
+          {/* Target & Current Level */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60">
               <div className="text-xs font-bold text-indigo-700 dark:text-indigo-400 uppercase tracking-wider mb-3">
@@ -269,15 +269,14 @@ export const ModalCriterion: React.FC<ModalCriterionProps> = ({
               </div>
             </div>
 
-            {/* AREA OVERRIDE CURRENT LEVEL */}
-            <div className="p-4 rounded-xl bg-red-50/50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50">
-              <div className="text-xs font-bold text-red-700 dark:text-red-400 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                <AlertTriangle className="w-3.5 h-3.5" />
-                Koreksi Manual Current Level
+            {/* AREA CURRENT LEVEL AWAL (Bersih & Netral) */}
+            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60">
+              <div className="text-xs font-bold text-indigo-700 dark:text-indigo-400 uppercase tracking-wider mb-3">
+                Current Level Awal
               </div>
               <div>
-                <label className="block text-xs font-bold text-red-900 dark:text-red-300 mb-1">
-                  Bypass / Override Level (0-5)
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Current Level (0 - 5)
                 </label>
                 <input
                   type="number"
@@ -285,10 +284,10 @@ export const ModalCriterion: React.FC<ModalCriterionProps> = ({
                   max={5}
                   value={currentLevel}
                   onChange={(e) => setCurrentLevel(isNaN(parseInt(e.target.value, 10)) ? 0 : Math.max(0, Math.min(5, parseInt(e.target.value, 10))))}
-                  className="w-full px-3 py-2 rounded-xl border border-red-300 dark:border-red-800 bg-white dark:bg-slate-800 text-red-700 dark:text-red-400 font-bold focus:ring-red-500"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold"
                 />
-                <p className="text-[10px] text-red-600 dark:text-red-400 mt-1.5 font-medium leading-tight">
-                  Ubah angka di sini hanya jika Anda melakukan kesalahan klik (typo) di tabel depan.
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-2 font-medium leading-tight">
+                  Kenaikan level selanjutnya hanya dapat dilakukan melalui penyelesaian 100% tugas di Action Plan.
                 </p>
               </div>
             </div>

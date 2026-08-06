@@ -8,15 +8,20 @@ import {
   ChevronDown,
   ChevronUp,
   FileText,
+  AlertCircle,
   AlertTriangle,
+  ExternalLink,
+  ShieldCheck,
   CheckCircle2,
+  HelpCircle,
 } from 'lucide-react';
-import { Assessment, Criterion, LifecycleStage, User } from '../types';
+import { Assessment, Criterion, LifecycleStage, FocusArea, User } from '../types';
 import {
   calculatePriorityScore,
   getPriorityCategory,
   IAPP_LEVEL_NAMES,
   isFoundationalDomain,
+  getFoundationalJustification,
 } from '../utils/scoring';
 
 interface AssessmentWorkspacePageProps {
@@ -38,14 +43,15 @@ const LIFECYCLE_STAGES: LifecycleStage[] = [
   'Seluruh Tahap',
 ];
 
-export const AssessmentWorkspacePage = ({
+export const AssessmentWorkspacePage: React.FC<AssessmentWorkspacePageProps> = ({
   assessment,
   currentUser,
   onUpdateCriterion,
   onDeleteCriterion,
   onOpenAddModal,
   onOpenEditModal,
-}: AssessmentWorkspacePageProps) => {
+}) => {
+  const isViewer = false; // Viewer role no longer exists — Admin and Assessor share full edit rights
 
   const [selectedStage, setSelectedStage] = useState<LifecycleStage>('Collection');
   const [searchTerm, setSearchTerm] = useState('');
@@ -54,10 +60,11 @@ export const AssessmentWorkspacePage = ({
   const [deletingCriterion, setDeletingCriterion] = useState<Criterion | null>(null);
 
   const criteria = assessment.criteria || [];
-  const domains = [...new Set(criteria.map((c: Criterion) => c.domain))].sort();
+  const domains = [...new Set(criteria.map((c) => c.domain))].sort();
 
-  const stageCriteria = criteria.filter((c: Criterion) => c.stage === selectedStage);
-  const filteredCriteria = stageCriteria.filter((c: Criterion) => {
+  // Filter criteria
+  const stageCriteria = criteria.filter((c) => c.stage === selectedStage);
+  const filteredCriteria = stageCriteria.filter((c) => {
     const matchesSearch =
       c.checklist.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.domain.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -78,19 +85,25 @@ export const AssessmentWorkspacePage = ({
           <div className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
             Tahapan Data Lifecycle Assessment
           </div>
-          <button
-            onClick={onOpenAddModal}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-sm bg-blue-600 text-white font-bold text-xs hover:bg-blue-700 shadow-sm transition-all"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>+ Tambah Kriteria</span>
-          </button>
+          {!isViewer ? (
+            <button
+              onClick={onOpenAddModal}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-sm bg-blue-600 text-white font-bold text-xs hover:bg-blue-700 shadow-sm transition-all"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>+ Tambah Kriteria</span>
+            </button>
+          ) : (
+            <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded border border-amber-300 dark:border-amber-800">
+              👁️ Mode Read-Only (Viewer)
+            </span>
+          )}
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
           {LIFECYCLE_STAGES.map((stg) => {
-            const count = criteria.filter((c: Criterion) => c.stage === stg).length;
-            const completed = criteria.filter((c: Criterion) => c.stage === stg && c.currentLevel > 0 && c.currentLevel >= c.targetLevel).length;
+            const count = criteria.filter((c) => c.stage === stg).length;
+            const completed = criteria.filter((c) => c.stage === stg && c.currentLevel > 0 && c.currentLevel >= c.targetLevel).length;
             const isSelected = selectedStage === stg;
 
             return (
@@ -157,9 +170,12 @@ export const AssessmentWorkspacePage = ({
       {/* Criteria Cards View */}
       {filteredCriteria.length > 0 ? (
         <div className="space-y-4">
-          {filteredCriteria.map((item: Criterion) => {
+          {filteredCriteria.map((item) => {
             const gap = Math.max(0, item.targetLevel - item.currentLevel);
-            const priorityScore = calculatePriorityScore(item.targetLevel, item.currentLevel);
+            const priorityScore = calculatePriorityScore(
+              item.targetLevel,
+              item.currentLevel
+            );
             const prioCategory = getPriorityCategory(priorityScore);
             const isFoundational = isFoundationalDomain(item.domain);
             const isExpanded = expandedId === item.id;
@@ -195,27 +211,29 @@ export const AssessmentWorkspacePage = ({
                     </span>
 
                     <span className={`px-2 py-0.5 rounded-sm text-[10px] font-bold uppercase tracking-wider ${prioCategory.badgeBg} ${prioCategory.badgeText}`}>
-                      {prioCategory.label} (Score {priorityScore}%)
+                      {prioCategory.label}
                     </span>
                   </div>
 
                   {/* Actions */}
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <button
-                      onClick={() => onOpenEditModal(item)}
-                      className="p-1.5 rounded-sm text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-800"
-                      title="Edit Kriteria"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => setDeletingCriterion(item)}
-                      className="p-1.5 rounded-sm text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40"
-                      title="Hapus Kriteria"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+                  {!isViewer && (
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <button
+                        onClick={() => onOpenEditModal(item)}
+                        className="p-1.5 rounded-sm text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-800"
+                        title="Edit Kriteria"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => setDeletingCriterion(item)}
+                        className="p-1.5 rounded-sm text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                        title="Hapus Kriteria"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Checklist Question */}
@@ -224,108 +242,100 @@ export const AssessmentWorkspacePage = ({
                 </div>
 
                 {/* Level Controls & Scoring Matrix */}
-                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10 items-center">
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60 flex flex-wrap lg:flex-nowrap items-center justify-between gap-6">
                   
-                  {/* Target Level Display (Fixed Width Indicator) */}
-                  <div className="lg:col-span-3">
-                    <div className="w-fit">
+                  {/* KELOMPOK KIRI: Target, Current, Gap */}
+                  {/* Jarak antar komponen diperbesar menjadi gap-8 atau gap-12 di layar besar */}
+                  <div className="flex flex-wrap items-center gap-8 md:gap-12">
+                    
+                    {/* Target Level (read-only) */}
+                    <div className="flex-shrink-0 w-32 sm:w-36">
                       <div className="flex items-center justify-between mb-2">
                         <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
                           Target Level
                         </label>
                         {item.targetLevel === 0 ? (
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-                            Belum Diatur
+                          <span className="text-[10px] font-bold text-amber-500">
+                            Belum
                           </span>
                         ) : (
-                          <span className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-wider pr-1">
-                            Lvl {item.targetLevel}
+                          <span className="text-[11px] font-black text-amber-600 dark:text-amber-500 uppercase tracking-wider">
+                            LVL {item.targetLevel}
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-1.5" title="Target Level (Ubah melalui form Edit)">
+                      <div className="flex items-center gap-1.5">
                         {[1, 2, 3, 4, 5].map((lvl) => (
                           <div
                             key={`target-${lvl}`}
-                            className={`h-2.5 w-8 rounded-full transition-all duration-300 ${
+                            className={`h-2.5 flex-1 rounded-full transition-all ${
                               item.targetLevel >= lvl
-                                ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.4)]'
+                                ? 'bg-amber-500 shadow-sm'
                                 : 'bg-slate-200 dark:bg-slate-700'
                             }`}
                           />
                         ))}
                       </div>
                     </div>
-                  </div>
 
-                  {/* Current Level Controls (Bebas Naik/Turun Instan Tanpa Hambatan) */}
-                  <div className="lg:col-span-3">
-                    <div className="w-fit">
+                    {/* Current Level Controls (Read-Only / Terkunci) */}
+                    <div className="flex-shrink-0">
                       <div className="flex items-center justify-between mb-1.5">
                         <label className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
                           Current Level
                         </label>
                         {item.currentLevel === 0 && (
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300">
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 ml-2">
                             Belum Diisi
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5" title="Diubah otomatis melalui penyelesaian Action Plan di halaman Rekomendasi">
                         {[1, 2, 3, 4, 5].map((lvl) => (
-                          <button
+                          <div
                             key={`current-${lvl}`}
-                            type="button"
-                            title={`Ubah ke Level ${lvl}`}
-                            onClick={() => {
-                              if (item.currentLevel !== lvl) {
-                                onUpdateCriterion(item.id, { currentLevel: lvl });
-                              }
-                            }}
                             className={`flex items-center justify-center w-8 h-8 rounded-lg text-xs font-bold transition-all ${
                               item.currentLevel === lvl
                                 ? 'bg-indigo-600 text-white shadow-md font-extrabold ring-2 ring-indigo-600/30 transform scale-105'
-                                : item.currentLevel > lvl
-                                ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-800 cursor-pointer'
-                                : 'bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:border-indigo-400 hover:text-indigo-600 cursor-pointer hover:bg-slate-50'
+                                : 'bg-slate-50 dark:bg-slate-800/30 text-slate-400 dark:text-slate-600 border border-slate-200 dark:border-slate-700'
                             }`}
                           >
                             {lvl}
-                          </button>
+                          </div>
                         ))}
+                      </div>
+                    </div>
+
+                    {/* Gap */}
+                    <div className="flex-shrink-0 min-w-[60px]">
+                      <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1.5">Gap</div>
+                      <div
+                        className={`text-sm font-black ${
+                          gap === 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'
+                        }`}
+                      >
+                        {gap === 0 ? '✓ Zero' : `${gap} Level`}
                       </div>
                     </div>
                   </div>
 
-                  {/* Gap */}
-                  <div className="lg:col-span-2">
-                    <div className="text-[10px] font-bold text-slate-400 mb-0.5">Gap</div>
-                    <div
-                      className={`text-sm font-black ${
-                        gap === 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'
-                      }`}
-                    >
-                      {gap === 0 ? '✓ Zero' : `${gap} Level`}
-                    </div>
-                  </div>
-
-                  {/* IAPP Maturity Name & Expand Button */}
-                  <div className="lg:col-span-4 flex items-center justify-between lg:justify-end gap-3 mt-2 lg:mt-0">
-                    <div 
-                      className="text-[11px] font-medium text-slate-500 text-right hidden lg:block max-w-[140px] xl:max-w-[180px] truncate" 
-                      title={IAPP_LEVEL_NAMES[item.currentLevel]?.split('—')[1] || ''}
-                    >
+                  {/* KELOMPOK KANAN: IAPP Maturity Name & Expand Button */}
+                  <div className="flex flex-col sm:flex-row items-center lg:justify-end gap-4 mt-4 lg:mt-0 flex-1">
+                    
+                    {/* Teks didekatkan ke tombol (hapus flex-1) dan dibuat rata tengah (text-center) */}
+                    <div className="text-[11px] font-medium text-slate-500 text-center leading-relaxed break-words max-w-[220px]">
                       {IAPP_LEVEL_NAMES[item.currentLevel]?.split('—')[1] || ''}
                     </div>
 
                     <button
                       onClick={() => toggleExpand(item.id)}
-                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 transition-colors shadow-sm bg-white dark:bg-slate-900"
+                      className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 transition-colors shadow-sm bg-white dark:bg-slate-900 whitespace-nowrap flex-shrink-0"
                     >
-                      <span>Dasar Hukum & Detail</span>
-                      {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                      <span>{isExpanded ? 'Sembunyikan' : 'Dasar Hukum & Detail'}</span>
+                      {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                     </button>
                   </div>
+
                 </div>
 
                 {/* Expandable Justification, References & Evidence Drawer */}

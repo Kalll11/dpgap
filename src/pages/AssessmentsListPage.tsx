@@ -123,7 +123,7 @@ export const AssessmentsListPage: React.FC<AssessmentsListPageProps> = ({
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {assessments.map((a) => {
           const compliance = calculateOverallCompliance(a.criteria || []);
           const riskInfo = calculateOverallRisk(a.criteria || []);
@@ -131,23 +131,24 @@ export const AssessmentsListPage: React.FC<AssessmentsListPageProps> = ({
           return (
             <div
               key={a.id}
-              className="group p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-xl hover:border-red-300 dark:hover:border-red-900/50 transition-all flex flex-col h-full relative overflow-hidden"
+              className="group p-5 rounded-2xl bg-white dark:bg-slate-900 shadow-md border border-slate-200/80 dark:border-slate-800 border-t-4 border-t-red-600 hover:shadow-xl hover:-translate-y-1 transition-all flex flex-col h-full relative overflow-hidden"
             >
-              <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/5 rounded-bl-full -mr-16 -mt-16 transition-transform group-hover:scale-110"></div>
+              {/* Decorative Blob */}
+              <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-red-100/50 to-transparent dark:from-red-900/20 rounded-bl-full -mr-8 -mt-8 transition-transform group-hover:scale-110"></div>
 
-              <div className="flex items-start justify-between gap-3 mb-3 relative z-10">
-                <div className="p-2.5 rounded-xl bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400">
+              <div className="flex items-start justify-between gap-3 mb-4 relative z-10">
+                {/* Folder Icon Container */}
+                <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/50 text-red-600 dark:text-red-400 ring-1 ring-red-100 dark:ring-red-900/50 shadow-sm">
                   <FolderOpen className="w-5 h-5" />
                 </div>
                 
-                {/* LANGKAH 2C: Assessor sekarang juga bisa melihat tombol Delete ini */}
                 {hasFullAccess && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       setDeletingId(a.id);
                     }}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 opacity-0 group-hover:opacity-100 transition-all"
+                    className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 opacity-0 group-hover:opacity-100 transition-all"
                     title="Hapus Assessment"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -155,42 +156,52 @@ export const AssessmentsListPage: React.FC<AssessmentsListPageProps> = ({
                 )}
               </div>
 
-              <div className="mb-4 flex-1 relative z-10">
-                <h3 className="text-base font-bold text-slate-900 dark:text-white leading-tight mb-1">
+              {/* Title & Desc */}
+              <div className="mb-5 flex-1 relative z-10">
+                <h3 className="text-lg font-extrabold text-slate-900 dark:text-white leading-snug mb-1.5 group-hover:text-red-600 dark:group-hover:text-red-400 transition-colors">
                   {a.name}
                 </h3>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed">
-                  {a.description || 'Tidak ada deskripsi'}
+                <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed">
+                  {a.description || 'Tidak ada deskripsi workspace.'}
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 mb-4 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800/80 relative z-10">
+              {/* Metrics Panggung */}
+              <div className="grid grid-cols-2 gap-3 mb-5 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700/50 relative z-10">
                 <div>
-                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">
+                  <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">
                     Compliance
                   </div>
-                  <div className="text-lg font-black text-emerald-600 dark:text-emerald-400">
+                  <div className="text-xl font-black text-emerald-600 dark:text-emerald-400">
                     {compliance}%
                   </div>
                 </div>
                 <div>
-                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">
+                  <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">
                     Risiko Gap
                   </div>
-                  <div className={`text-sm font-black mt-1 ${riskInfo.badgeText}`}>
+                  {/* Badge untuk Risiko */}
+                  <div className={`inline-flex items-center px-2.5 py-0.5 mt-0.5 rounded-full text-xs font-black bg-white dark:bg-slate-900 shadow-sm border border-slate-200 dark:border-slate-700 ${riskInfo.badgeText}`}>
                     {riskInfo.label}
                   </div>
                 </div>
               </div>
 
+              {/* Footer */}
               <div className="flex items-center justify-between mt-auto pt-4 border-t border-slate-100 dark:border-slate-800 relative z-10">
-                <div className="flex items-center gap-1.5 text-[10px] font-medium text-slate-500">
-                  <Calendar className="w-3 h-3" />
-                  <span>{new Date(a.updatedAt).toLocaleDateString('id-ID')}</span>
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500">
+                  <Calendar className="w-3.5 h-3.5 opacity-70" />
+                  <span>
+                    {new Date(a.updatedAt).toLocaleDateString('id-ID', {
+                      day: 'numeric',
+                      month: 'short',
+                      year: 'numeric'
+                    })}
+                  </span>
                 </div>
                 <button
                   onClick={() => onOpenAssessment(a.id)}
-                  className="px-3.5 py-1.5 rounded-lg bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-[10px] font-bold hover:bg-slate-800 dark:hover:bg-slate-100 shadow-sm transition-colors"
+                  className="px-4 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-bold hover:bg-red-600 dark:hover:bg-red-500 hover:text-white shadow-md transition-all flex items-center gap-1.5"
                 >
                   Buka Workspace
                 </button>
