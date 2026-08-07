@@ -106,6 +106,11 @@ function resolveSeedPassword(envVar: string, email: string): string {
 const DEFAULT_PASSWORDS: Record<string, string> = {
   'admin@telkomhub.co.id': resolveSeedPassword('SEED_ADMIN_PASSWORD', 'admin@telkomhub.co.id'),
   'assessor@telkomhub.co.id': resolveSeedPassword('SEED_ASSESSOR_PASSWORD', 'assessor@telkomhub.co.id'),
+  // Akun dummy: kredensial SENGAJA dibuat tetap/predictable (bukan random) supaya
+  // siapa pun bisa langsung "Masuk Cepat sebagai Demo" dari halaman login menuju
+  // menu utama tanpa harus buka log server. Bisa dioverride lewat .env (SEED_DEMO_PASSWORD).
+  // JANGAN dipakai di deployment produksi — ganti/nonaktifkan akun ini sebelum go-live.
+  'demo@telkomhub.co.id': process.env.SEED_DEMO_PASSWORD || 'Demo@12345',
 };
 
 function sanitizeUser(u: User): User {
@@ -449,10 +454,17 @@ async function startServer() {
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = Date.now() + 15 * 60 * 1000; // 15 Menit
     const passwordHash = bcrypt.hashSync(password, 10);
-    
+
+    // Registrasi mandiri via halaman publik SELALU menghasilkan role 'Assessor'.
+    // Role dari body request sengaja diabaikan (tidak dipercaya) — akun Admin
+    // hanya boleh dibuat lewat promosi role oleh Admin yang sudah ada
+    // (lihat PATCH /api/users/:id/role, requireRoles('Admin')).
+    void role;
+    const registrationRole: Role = 'Assessor';
+
 pendingOtps.set(email.toLowerCase(), { 
       otp: otpCode, 
-      userData: { fullname, employeeId, email, role: role || 'Assessor', passwordHash }, 
+      userData: { fullname, employeeId, email, role: registrationRole, passwordHash }, 
       expiresAt 
     });
 

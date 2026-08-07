@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion } from 'motion/react';
 import { User, Assessment, Criterion, AuditLog, Role } from '../../shared/types';
 import {
   fetchAssessments,
@@ -505,7 +506,13 @@ const handleVerifyOtp = async (email: string, otp: string) => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex transition-colors">
+    <motion.div
+      key="main-app-shell"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+      className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex transition-colors"
+    >
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
 
       {/* Sidebar */}
@@ -657,6 +664,6 @@ const handleVerifyOtp = async (email: string, otp: string) => {
         editingCriterion={editingCriterion}
         domains={availableDomains}
       />
-    </div>
+    </motion.div>
   );
 }

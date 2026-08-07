@@ -1,7 +1,18 @@
 import React, { useState } from 'react';
-import { UserCheck, BadgeCheck, Mail, Lock, Eye, EyeOff, ShieldCheck, KeyRound, ArrowLeft } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { UserCheck, BadgeCheck, Mail, Lock, Eye, EyeOff, ShieldCheck, KeyRound, ArrowLeft, ClipboardCheck } from 'lucide-react';
 import { getPasswordStrength, validatePasswordStrength } from '../../utils/authValidation';
 import SliderCaptcha from './SliderCaptcha';
+
+// Field entrance stagger — dipakai di seluruh form register
+const fieldVariants = {
+  hidden: { opacity: 0, y: 10 },
+  visible: (i: number) => ({
+    opacity: 1,
+    y: 0,
+    transition: { delay: i * 0.05, duration: 0.35, ease: [0.16, 1, 0.3, 1] as const },
+  }),
+};
 
 interface RegisterFormProps {
   onRegister: (fullname: string, employeeId: string, email: string, pass: string, role: string) => Promise<any>;
@@ -20,7 +31,10 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onRegister, onVerifyOtp, on
   const [fullname, setFullname] = useState('');
   const [employeeId, setEmployeeId] = useState('');
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState<'Admin' | 'Assessor'>('Assessor');
+  // Pendaftaran mandiri SELALU sebagai Assessor. Akun Admin hanya bisa dibuat
+  // lewat promosi role oleh Admin yang sudah ada (menu Kelola User), bukan lewat
+  // form pendaftaran publik ini.
+  const role: 'Assessor' = 'Assessor';
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -90,243 +104,301 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onRegister, onVerifyOtp, on
     setErrorMsg('');
   };
 
-  if (step === 'otp') {
-    return (
-      <form onSubmit={handleVerifyOtpSubmit} className="space-y-5">
-        {successMsg && (
-          <div className="rounded-2xl border border-red-100 bg-red-50 p-4 text-sm text-red-700">{successMsg}</div>
-        )}
-        {errorMsg && (
-          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{errorMsg}</div>
-        )}
-
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-center">
-          <KeyRound className="mx-auto mb-2 h-7 w-7 text-red-500" />
-          <h4 className="text-sm font-bold text-slate-900">Autentikasi Non-Robot (OTP)</h4>
-          <p className="mt-1 text-xs text-slate-500">
-            Masukkan 6 digit kode yang dikirim ke <span className="font-semibold text-red-600">{email}</span>
-          </p>
-        </div>
-
-        <div>
-          <label className="mb-2 block text-center text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-            Kode Verifikasi
-          </label>
-          <input
-            type="text"
-            inputMode="numeric"
-            maxLength={6}
-            required
-            autoFocus
-            value={otpCode}
-            onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
-            placeholder="000000"
-            className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3.5 text-center text-2xl font-black tracking-[0.4em] text-slate-900 outline-none focus:border-red-300 focus:bg-white focus:ring-2 focus:ring-red-100"
-          />
-        </div>
-
-        <button
-          type="submit"
-          disabled={loading || otpCode.length !== 6}
-          className="flex w-full items-center justify-center gap-2 rounded-full bg-[#AA040E] px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-red-900/25 transition hover:bg-[#8F040C] disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {loading ? 'Memverifikasi...' : (
-            <>
-              <ShieldCheck className="h-4 w-4" /> Verifikasi & Selesaikan Pendaftaran
-            </>
-          )}
-        </button>
-        <button
-          type="button"
-          onClick={resetFlow}
-          className="flex w-full items-center justify-center gap-1.5 rounded-full border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" /> Ubah data pendaftaran / kirim ulang kode
-        </button>
-      </form>
-    );
-  }
-
   return (
-    <form onSubmit={handleRegisterSubmit} className="space-y-5">
-      {errorMsg && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{errorMsg}</div>
-      )}
-
-      <div>
-        <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-          Nama Lengkap
-        </label>
-        <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 focus-within:border-red-300 focus-within:bg-white focus-within:ring-2 focus-within:ring-red-100">
-          <UserCheck className="h-4 w-4 text-slate-400" />
-          <input
-            type="text"
-            required
-            value={fullname}
-            onChange={(e) => setFullname(e.target.value)}
-            placeholder="Masukkan Nama Anda"
-            className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
-          />
-        </div>
-      </div>
-
-      <div>
-        <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-          ID Karyawan (NIK/NIP)
-        </label>
-        <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 focus-within:border-red-300 focus-within:bg-white focus-within:ring-2 focus-within:ring-red-100">
-          <BadgeCheck className="h-4 w-4 text-slate-400" />
-          <input
-            type="text"
-            required
-            value={employeeId}
-            onChange={(e) => setEmployeeId(e.target.value)}
-            placeholder="Masukkan ID Karyawan"
-            className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
-          />
-        </div>
-      </div>
-
-      <div>
-        <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-          Pilih Role Akses
-        </label>
-        <select
-          value={role}
-          onChange={(e) => setRole(e.target.value as 'Admin' | 'Assessor')}
-          className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900 outline-none focus:border-red-300 focus:bg-white focus:ring-2 focus:ring-red-100"
+    <AnimatePresence mode="wait" initial={false}>
+      {step === 'otp' ? (
+        <motion.form
+          key="otp-step"
+          onSubmit={handleVerifyOtpSubmit}
+          className="space-y-5"
+          initial={{ opacity: 0, x: 24 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -24 }}
+          transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
         >
-          <option value="Assessor">Assessor (Penilai Kepatuhan)</option>
-          <option value="Admin">Admin (Kelola Sistem & Role)</option>
-        </select>
-      </div>
+          <AnimatePresence>
+            {successMsg && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden rounded-2xl border border-red-100 bg-red-50 p-4 text-sm text-red-700"
+              >
+                {successMsg}
+              </motion.div>
+            )}
+            {errorMsg && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+              >
+                {errorMsg}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-      <div>
-        <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-          Email Kerja Resmi
-        </label>
-        <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 focus-within:border-red-300 focus-within:bg-white focus-within:ring-2 focus-within:ring-red-100">
-          <Mail className="h-4 w-4 text-slate-400" />
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="nama@telkomhub.co.id"
-            className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
-          />
-        </div>
-        <p className="mt-2 text-[11px] text-slate-500">
-          Domain wajib <span className="font-medium text-red-600">@telkomhub.co.id</span> atau{' '}
-          <span className="font-medium text-red-600">@telkom.co.id</span>.
-        </p>
-      </div>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.1, duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+            className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-center"
+          >
+            <KeyRound className="mx-auto mb-2 h-7 w-7 text-red-500" />
+            <h4 className="text-sm font-bold text-slate-900">Autentikasi Non-Robot (OTP)</h4>
+            <p className="mt-1 text-xs text-slate-500">
+              Masukkan 6 digit kode yang dikirim ke <span className="font-semibold text-red-600">{email}</span>
+            </p>
+          </motion.div>
 
-      <div>
-        <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-          Kata Sandi
-        </label>
-        <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 focus-within:border-red-300 focus-within:bg-white focus-within:ring-2 focus-within:ring-red-100">
-          <Lock className="h-4 w-4 text-slate-400" />
-          <input
-            type={showPassword ? 'text' : 'password'}
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Buat kata sandi"
-            className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
-          />
+          <div>
+            <label className="mb-2 block text-center text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Kode Verifikasi
+            </label>
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={6}
+              required
+              autoFocus
+              value={otpCode}
+              onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+              placeholder="000000"
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3.5 text-center text-2xl font-black tracking-[0.4em] text-slate-900 outline-none focus:border-red-300 focus:bg-white focus:ring-2 focus:ring-red-100"
+            />
+          </div>
+
+          <motion.button
+            whileHover={{ scale: loading || otpCode.length !== 6 ? 1 : 1.015 }}
+            whileTap={{ scale: loading || otpCode.length !== 6 ? 1 : 0.98 }}
+            type="submit"
+            disabled={loading || otpCode.length !== 6}
+            className="flex w-full items-center justify-center gap-2 rounded-full bg-[#AA040E] px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-red-900/25 transition hover:bg-[#8F040C] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loading ? 'Memverifikasi...' : (
+              <>
+                <ShieldCheck className="h-4 w-4" /> Verifikasi & Selesaikan Pendaftaran
+              </>
+            )}
+          </motion.button>
           <button
             type="button"
-            onClick={() => setShowPassword((prev) => !prev)}
-            className="text-slate-400 transition hover:text-slate-600"
-            tabIndex={-1}
+            onClick={resetFlow}
+            className="flex w-full items-center justify-center gap-1.5 rounded-full border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
           >
-            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            <ArrowLeft className="h-3.5 w-3.5" /> Ubah data pendaftaran / kirim ulang kode
           </button>
-        </div>
-        <div className="mt-3 space-y-2">
-          <div className="flex items-center justify-between text-[11px] text-slate-500">
-            <span>Kekuatan password</span>
-            <span className={`font-semibold ${passwordStrength.color}`}>{passwordStrength.label}</span>
-          </div>
-          <div className="grid grid-cols-5 gap-1">
-            {[1, 2, 3, 4, 5].map((index) => {
-              const active = index <= passwordStrength.score;
-              return (
-                <div
-                  key={index}
-                  className={`h-1.5 rounded-full transition-colors ${
-                    active ? strengthBarTone(passwordStrength.score) : 'bg-slate-200'
-                  }`}
-                />
-              );
-            })}
-          </div>
-          <p className="text-[11px] text-slate-500">
-            Minimal 8 karakter, kombinasi huruf besar/kecil, angka, dan karakter khusus.
+        </motion.form>
+      ) : (
+        <motion.form
+          key="form-step"
+          onSubmit={handleRegisterSubmit}
+          className="space-y-5"
+          initial={{ opacity: 0, x: -24 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: 24 }}
+          transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <AnimatePresence>
+            {errorMsg && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+              >
+                {errorMsg}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <motion.div custom={0} variants={fieldVariants} initial="hidden" animate="visible">
+            <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Nama Lengkap
+            </label>
+            <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 focus-within:border-red-300 focus-within:bg-white focus-within:ring-2 focus-within:ring-red-100">
+              <UserCheck className="h-4 w-4 text-slate-400" />
+              <input
+                type="text"
+                required
+                value={fullname}
+                onChange={(e) => setFullname(e.target.value)}
+                placeholder="Masukkan Nama Anda"
+                className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+              />
+            </div>
+          </motion.div>
+
+          <motion.div custom={1} variants={fieldVariants} initial="hidden" animate="visible">
+            <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+              ID Karyawan (NIK/NIP)
+            </label>
+            <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 focus-within:border-red-300 focus-within:bg-white focus-within:ring-2 focus-within:ring-red-100">
+              <BadgeCheck className="h-4 w-4 text-slate-400" />
+              <input
+                type="text"
+                required
+                value={employeeId}
+                onChange={(e) => setEmployeeId(e.target.value)}
+                placeholder="Masukkan ID Karyawan"
+                className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+              />
+            </div>
+          </motion.div>
+
+          <motion.div custom={2} variants={fieldVariants} initial="hidden" animate="visible">
+            <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Role Akses
+            </label>
+            <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+              <ClipboardCheck className="h-4 w-4 flex-shrink-0 text-emerald-600" />
+              <div>
+                <div className="text-sm font-bold text-emerald-800">Assessor (Penilai Kepatuhan)</div>
+                <p className="mt-0.5 text-[11px] leading-relaxed text-emerald-700/80">
+                  Semua pendaftaran mandiri otomatis menjadi Assessor. Untuk akses Admin, hubungi DPO/Admin
+                  sistem agar role Anda dipromosikan setelah akun aktif.
+                </p>
+              </div>
+            </div>
+          </motion.div>
+
+          <motion.div custom={3} variants={fieldVariants} initial="hidden" animate="visible">
+            <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Email Kerja Resmi
+            </label>
+            <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 focus-within:border-red-300 focus-within:bg-white focus-within:ring-2 focus-within:ring-red-100">
+              <Mail className="h-4 w-4 text-slate-400" />
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="nama@telkomhub.co.id"
+                className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+              />
+            </div>
+            <p className="mt-2 text-[11px] text-slate-500">
+              Domain wajib <span className="font-medium text-red-600">@telkomhub.co.id</span> atau{' '}
+              <span className="font-medium text-red-600">@telkom.co.id</span>.
+            </p>
+          </motion.div>
+
+          <motion.div custom={4} variants={fieldVariants} initial="hidden" animate="visible">
+            <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Kata Sandi
+            </label>
+            <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 focus-within:border-red-300 focus-within:bg-white focus-within:ring-2 focus-within:ring-red-100">
+              <Lock className="h-4 w-4 text-slate-400" />
+              <input
+                type={showPassword ? 'text' : 'password'}
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Buat kata sandi"
+                className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((prev) => !prev)}
+                className="text-slate-400 transition hover:text-slate-600"
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+            <div className="mt-3 space-y-2">
+              <div className="flex items-center justify-between text-[11px] text-slate-500">
+                <span>Kekuatan password</span>
+                <span className={`font-semibold ${passwordStrength.color}`}>{passwordStrength.label}</span>
+              </div>
+              <div className="grid grid-cols-5 gap-1">
+                {[1, 2, 3, 4, 5].map((index) => {
+                  const active = index <= passwordStrength.score;
+                  return (
+                    <motion.div
+                      key={index}
+                      animate={{ scaleY: active ? 1 : 0.6, opacity: active ? 1 : 0.5 }}
+                      transition={{ duration: 0.2 }}
+                      className={`h-1.5 rounded-full transition-colors ${
+                        active ? strengthBarTone(passwordStrength.score) : 'bg-slate-200'
+                      }`}
+                    />
+                  );
+                })}
+              </div>
+              <p className="text-[11px] text-slate-500">
+                Minimal 8 karakter, kombinasi huruf besar/kecil, angka, dan karakter khusus.
+              </p>
+            </div>
+          </motion.div>
+
+          <motion.div custom={5} variants={fieldVariants} initial="hidden" animate="visible">
+            <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Konfirmasi Kata Sandi
+            </label>
+            <div
+              className={`flex items-center gap-3 rounded-2xl border bg-slate-50 px-4 py-3 focus-within:bg-white focus-within:ring-2 ${
+                passwordsMatch
+                  ? 'border-slate-200 focus-within:border-red-300 focus-within:ring-red-100'
+                  : 'border-red-300 focus-within:ring-red-100'
+              }`}
+            >
+              <Lock className="h-4 w-4 text-slate-400" />
+              <input
+                type={showConfirmPassword ? 'text' : 'password'}
+                required
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Ulangi kata sandi"
+                className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword((prev) => !prev)}
+                className="text-slate-400 transition hover:text-slate-600"
+                tabIndex={-1}
+              >
+                {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+            {!passwordsMatch && <p className="mt-2 text-[11px] text-red-600">Konfirmasi kata sandi tidak cocok.</p>}
+          </motion.div>
+
+          <motion.div custom={6} variants={fieldVariants} initial="hidden" animate="visible">
+            <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Verifikasi Keamanan
+            </label>
+            <SliderCaptcha resetSignal={sliderResetSignal} onVerify={setCaptchaVerified} />
+          </motion.div>
+
+          <motion.button
+            custom={7}
+            variants={fieldVariants}
+            initial="hidden"
+            animate="visible"
+            whileHover={{ scale: loading || !captchaVerified ? 1 : 1.015 }}
+            whileTap={{ scale: loading || !captchaVerified ? 1 : 0.98 }}
+            type="submit"
+            disabled={loading || !captchaVerified}
+            className="flex w-full items-center justify-center gap-2 rounded-full bg-red-600 px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-red-500/20 transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loading ? 'Mengirim OTP...' : (
+              <>
+                <UserCheck className="h-4 w-4" /> Daftar & Kirim Kode OTP
+              </>
+            )}
+          </motion.button>
+
+          <p className="text-center text-sm text-slate-500">
+            Sudah punya akun?{' '}
+            <button type="button" onClick={onSwitchToLogin} className="font-semibold text-red-600 hover:text-red-700">
+              Masuk sekarang
+            </button>
           </p>
-        </div>
-      </div>
-
-      <div>
-        <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-          Konfirmasi Kata Sandi
-        </label>
-        <div
-          className={`flex items-center gap-3 rounded-2xl border bg-slate-50 px-4 py-3 focus-within:bg-white focus-within:ring-2 ${
-            passwordsMatch
-              ? 'border-slate-200 focus-within:border-red-300 focus-within:ring-red-100'
-              : 'border-red-300 focus-within:ring-red-100'
-          }`}
-        >
-          <Lock className="h-4 w-4 text-slate-400" />
-          <input
-            type={showConfirmPassword ? 'text' : 'password'}
-            required
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            placeholder="Ulangi kata sandi"
-            className="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
-          />
-          <button
-            type="button"
-            onClick={() => setShowConfirmPassword((prev) => !prev)}
-            className="text-slate-400 transition hover:text-slate-600"
-            tabIndex={-1}
-          >
-            {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-          </button>
-        </div>
-        {!passwordsMatch && <p className="mt-2 text-[11px] text-red-600">Konfirmasi kata sandi tidak cocok.</p>}
-      </div>
-
-      <div>
-        <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-          Verifikasi Keamanan
-        </label>
-        <SliderCaptcha resetSignal={sliderResetSignal} onVerify={setCaptchaVerified} />
-      </div>
-
-      <button
-        type="submit"
-        disabled={loading || !captchaVerified}
-        className="flex w-full items-center justify-center gap-2 rounded-full bg-red-600 px-6 py-3.5 text-sm font-bold text-white shadow-lg shadow-red-500/20 transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {loading ? 'Mengirim OTP...' : (
-          <>
-            <UserCheck className="h-4 w-4" /> Daftar & Kirim Kode OTP
-          </>
-        )}
-      </button>
-
-      <p className="text-center text-sm text-slate-500">
-        Sudah punya akun?{' '}
-        <button type="button" onClick={onSwitchToLogin} className="font-semibold text-red-600 hover:text-red-700">
-          Masuk sekarang
-        </button>
-      </p>
-    </form>
+        </motion.form>
+      )}
+    </AnimatePresence>
   );
 };
 

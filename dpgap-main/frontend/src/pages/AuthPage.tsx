@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { ShieldCheck, Lock, UserPlus2 } from 'lucide-react';
 import LoginForm from '../components/auth/LoginForm';
 import RegisterForm from '../components/auth/RegisterForm';
@@ -44,7 +45,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onRegister, onVerif
           }}
         />
 
-        <div className="relative z-10 max-w-xl space-y-8">
+        <motion.div
+          initial={{ opacity: 0, x: -24 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+          className="relative z-10 max-w-xl space-y-8"
+        >
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-red-600 to-red-800 text-sm font-black text-white shadow-lg shadow-red-600/30">
               TLK
@@ -71,25 +77,33 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onRegister, onVerif
           </p>
 
           <div className="grid max-w-md grid-cols-3 gap-4 border-t border-white/10 pt-8">
-            <div>
-              <div className="text-2xl font-bold text-white">40+</div>
-              <div className="mt-1 text-xs text-slate-400">Kriteria per assessment</div>
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-white">13</div>
-              <div className="mt-1 text-xs text-slate-400">Fokus area kepatuhan</div>
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-white">6</div>
-              <div className="mt-1 text-xs text-slate-400">Tahap siklus data</div>
-            </div>
+            {[
+              { value: '40+', label: 'Kriteria per assessment' },
+              { value: '13', label: 'Fokus area kepatuhan' },
+              { value: '6', label: 'Tahap siklus data' },
+            ].map((stat, i) => (
+              <motion.div
+                key={stat.label}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 + i * 0.1, duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+              >
+                <div className="text-2xl font-bold text-white">{stat.value}</div>
+                <div className="mt-1 text-xs text-slate-400">{stat.label}</div>
+              </motion.div>
+            ))}
           </div>
-        </div>
+        </motion.div>
       </div>
 
       {/* ============ SISI KANAN — Kontainer Form ============ */}
       <div className="flex h-screen w-full flex-1 flex-col items-center justify-center overflow-y-auto bg-slate-100 p-6 md:p-10">
-        <div className="my-auto w-full max-w-md rounded-2xl border border-slate-200/80 bg-white p-8 shadow-xl">
+        <motion.div
+          initial={{ opacity: 0, y: 16, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+          className="my-auto w-full max-w-md rounded-2xl border border-slate-200/80 bg-white p-8 shadow-xl"
+        >
           {/* Badge ringkas untuk layar kecil (sisi kiri disembunyikan di mobile) */}
           <div className="mb-6 flex items-center gap-3 md:hidden">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-red-600 to-red-800 text-[10px] font-black text-white">
@@ -102,24 +116,44 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onRegister, onVerif
           </div>
 
           <div className="mb-6 flex items-center gap-3">
-            <div className="rounded-full bg-red-50 p-2.5 text-red-600">
+            <motion.div
+              key={activeTab}
+              initial={{ scale: 0.7, opacity: 0, rotate: -8 }}
+              animate={{ scale: 1, opacity: 1, rotate: 0 }}
+              transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+              className="rounded-full bg-red-50 p-2.5 text-red-600"
+            >
               {activeTab === 'login' ? <Lock className="h-5 w-5" /> : <UserPlus2 className="h-5 w-5" />}
-            </div>
-            <div>
+            </motion.div>
+            <div className="overflow-hidden">
               <div className="text-[11px] font-bold uppercase tracking-[0.28em] text-red-500">DPGAP Access</div>
-              <h2 className="mt-1 text-2xl font-extrabold text-slate-950">
-                {activeTab === 'login' ? 'Selamat datang kembali' : 'Pendaftaran Akun Baru'}
-              </h2>
+              <AnimatePresence mode="wait">
+                <motion.h2
+                  key={activeTab}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.2 }}
+                  className="mt-1 text-2xl font-extrabold text-slate-950"
+                >
+                  {activeTab === 'login' ? 'Selamat datang kembali' : 'Pendaftaran Akun Baru'}
+                </motion.h2>
+              </AnimatePresence>
             </div>
           </div>
 
           {/* Tab Switcher */}
-          <div className="mb-7 grid grid-cols-2 gap-2 rounded-full bg-slate-100 p-1">
+          <div className="relative mb-7 grid grid-cols-2 gap-2 rounded-full bg-slate-100 p-1">
+            <motion.div
+              className="absolute inset-y-1 w-[calc(50%-0.25rem)] rounded-full bg-white shadow-sm"
+              animate={{ x: activeTab === 'login' ? 4 : 'calc(100% + 4px)' }}
+              transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+            />
             <button
               type="button"
               onClick={() => setActiveTab('login')}
-              className={`rounded-full px-4 py-2.5 text-sm font-semibold transition-all ${
-                activeTab === 'login' ? 'bg-white text-red-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              className={`relative z-10 rounded-full px-4 py-2.5 text-sm font-semibold transition-colors ${
+                activeTab === 'login' ? 'text-red-600' : 'text-slate-500 hover:text-slate-700'
               }`}
             >
               Masuk System
@@ -127,20 +161,38 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin, onRegister, onVerif
             <button
               type="button"
               onClick={() => setActiveTab('register')}
-              className={`rounded-full px-4 py-2.5 text-sm font-semibold transition-all ${
-                activeTab === 'register' ? 'bg-white text-red-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              className={`relative z-10 rounded-full px-4 py-2.5 text-sm font-semibold transition-colors ${
+                activeTab === 'register' ? 'text-red-600' : 'text-slate-500 hover:text-slate-700'
               }`}
             >
               Daftar Karyawan
             </button>
           </div>
 
-          {activeTab === 'login' ? (
-            <LoginForm onLogin={onLogin} onSwitchToRegister={() => setActiveTab('register')} />
-          ) : (
-            <RegisterForm onRegister={onRegister} onVerifyOtp={onVerifyOtp} onSwitchToLogin={() => setActiveTab('login')} />
-          )}
-        </div>
+          <AnimatePresence mode="wait">
+            {activeTab === 'login' ? (
+              <motion.div
+                key="login-tab"
+                initial={{ opacity: 0, x: -16 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 16 }}
+                transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+              >
+                <LoginForm onLogin={onLogin} onSwitchToRegister={() => setActiveTab('register')} />
+              </motion.div>
+            ) : (
+              <motion.div
+                key="register-tab"
+                initial={{ opacity: 0, x: 16 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -16 }}
+                transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+              >
+                <RegisterForm onRegister={onRegister} onVerifyOtp={onVerifyOtp} onSwitchToLogin={() => setActiveTab('login')} />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
       </div>
     </div>
   );

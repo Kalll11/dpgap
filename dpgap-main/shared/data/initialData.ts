@@ -33,6 +33,18 @@ export const INITIAL_USERS: User[] = [
     email: 'assessor@telkomhub.co.id',
     role: 'Assessor',
     createdAt: '2026-02-01T09:30:00Z',
+  },
+  {
+    // Akun dummy/percobaan — kredensial tetap (lihat DEFAULT_PASSWORDS di server.ts),
+    // dipakai untuk tombol "Masuk Cepat sebagai Demo" di halaman login supaya bisa
+    // langsung masuk ke menu utama tanpa perlu registrasi/OTP. Selalu Assessor,
+    // TIDAK PERNAH Admin. Jangan dipakai di environment produksi sungguhan.
+    id: 'u-3',
+    fullname: 'Akun Demo (Percobaan)',
+    employeeId: 'EMP-DEMO',
+    email: 'demo@telkomhub.co.id',
+    role: 'Assessor',
+    createdAt: '2026-03-01T09:00:00Z',
   }
 ];
 

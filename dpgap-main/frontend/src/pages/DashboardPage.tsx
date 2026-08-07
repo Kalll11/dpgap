@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion } from 'motion/react';
 import {
   Radar,
   RadarChart,
@@ -40,6 +41,22 @@ interface DashboardPageProps {
   assessment: Assessment;
   onSaveSnapshot: () => void;
 }
+
+// Stagger entrance untuk 4 KPI card — animasi ini yang pertama kali terlihat
+// begitu user masuk ke menu utama (Dashboard).
+const kpiContainerVariants = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.08 } },
+};
+const kpiCardVariants = {
+  hidden: { opacity: 0, y: 16, scale: 0.98 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] as const },
+  },
+};
 
 // Custom Tick for PolarAngleAxis to prevent text overlapping on Spider Chart
 const renderCustomAngleTick = (props: any) => {
@@ -164,9 +181,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ assessment, onSave
   return (
     <div className="space-y-6">
       {/* 4 Core Executive KPI Cards - Clean & Visual */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <motion.div
+        variants={kpiContainerVariants}
+        initial="hidden"
+        animate="visible"
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
+      >
         {/* Card 1: Overall Compliance */}
-        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col justify-between hover:border-red-200 dark:hover:border-red-900/50 transition-all">
+        <motion.div variants={kpiCardVariants} whileHover={{ y: -3 }} className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col justify-between hover:border-red-200 dark:hover:border-red-900/50 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Tingkat Kepatuhan Absolut</span>
             <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400">
@@ -188,10 +210,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ assessment, onSave
               {compliance >= 80 ? 'Sangat Baik' : compliance >= 60 ? 'Cukup Baik' : 'Perlu Perbaikan'}
             </span>
           </div>
-        </div>
+        </motion.div>
 
         {/* Card 2: Risk Level */}
-        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col justify-between hover:border-red-200 dark:hover:border-red-900/50 transition-all">
+        <motion.div variants={kpiCardVariants} whileHover={{ y: -3 }} className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col justify-between hover:border-red-200 dark:hover:border-red-900/50 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Tingkat Risiko Gap</span>
             <div className="p-2 rounded-xl bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400">
@@ -209,10 +231,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ assessment, onSave
           <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
             Kalkulasi besaran Gap x Impact Risiko
           </div>
-        </div>
+        </motion.div>
 
         {/* Card 3: Critical Focus Area */}
-        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col justify-between hover:border-red-200 dark:hover:border-red-900/50 transition-all">
+        <motion.div variants={kpiCardVariants} whileHover={{ y: -3 }} className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col justify-between hover:border-red-200 dark:hover:border-red-900/50 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Fokus Perbaikan Prioritas</span>
             <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400">
@@ -251,10 +273,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ assessment, onSave
           <div className="text-[11px] text-red-600 dark:text-red-400 font-bold truncate">
             Terdapat {majorGapCount} kriteria dengan Gap Utama (3+ Level)
           </div>
-        </div>
+        </motion.div>
 
         {/* Card 4: Action Plan Progress */}
-        <div className={`p-5 rounded-2xl bg-white dark:bg-slate-900 border shadow-sm flex flex-col justify-between transition-all ${
+        <motion.div variants={kpiCardVariants} whileHover={{ y: -3 }} className={`p-5 rounded-2xl bg-white dark:bg-slate-900 border shadow-sm flex flex-col justify-between transition-all ${
           isAllMet 
             ? 'border-emerald-200 dark:border-emerald-900/50 hover:border-emerald-300' 
             : 'border-slate-200/80 dark:border-slate-800 hover:border-blue-200 dark:hover:border-blue-900/50'
@@ -299,8 +321,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ assessment, onSave
               ? "Semua kriteria telah mencapai target. Tidak ada tugas remediasi yang diperlukan." 
               : "*Persentase eksekusi dokumen/tugas remediasi yang telah diselesaikan."}
           </div>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
 
       {/* Visual Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
