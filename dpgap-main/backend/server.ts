@@ -63,6 +63,11 @@ function decryptAES(hash: string): string {
 // ==========================================
 // 2. SETUP NODEMAILER & OTP STORE
 // ==========================================
+const EMAIL_CONFIGURED = Boolean(process.env.EMAIL_USER && process.env.EMAIL_PASS);
+if (!EMAIL_CONFIGURED) {
+  console.warn('⚠️ EMAIL_USER/EMAIL_PASS belum diset di .env — OTP tidak akan benar-benar terkirim via email, kode OTP akan ditampilkan di log server sebagai gantinya.');
+}
+
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
@@ -445,11 +450,19 @@ async function startServer() {
     const expiresAt = Date.now() + 15 * 60 * 1000; // 15 Menit
     const passwordHash = bcrypt.hashSync(password, 10);
     
-    pendingOtps.set(email.toLowerCase(), { 
+pendingOtps.set(email.toLowerCase(), { 
       otp: otpCode, 
       userData: { fullname, employeeId, email, role: role || 'Assessor', passwordHash }, 
       expiresAt 
     });
+
+    // Kalau kredensial email belum diset di .env, jangan blokir pendaftaran —
+    // tampilkan kode OTP di log server sebagai gantinya (khusus mode development).
+    if (!EMAIL_CONFIGURED) {
+      console.log(`✉️  [EMAIL TIDAK DIKIRIM - EMAIL_USER/EMAIL_PASS belum diset] Tujuan: ${email} | Kode OTP registrasi: ${otpCode}`);
+      res.status(200).json({ message: 'Kode verifikasi dibuat, namun email tidak dapat dikirim (kredensial email belum dikonfigurasi). Cek log server untuk kode OTP.' });
+      return;
+    }
 
     try {
       await transporter.sendMail({
@@ -460,7 +473,11 @@ async function startServer() {
       });
       res.status(200).json({ message: 'Kode OTP telah dikirim ke email Anda.' });
     } catch (err: any) {
-      res.status(500).json({ error: 'Gagal mengirim email OTP: Periksa kredensial email di .env' });
+      // Kredensial ada tapi pengiriman tetap gagal (mis. salah App Password) —
+      // tetap fallback ke log supaya user tidak terjebak, tapi beri tahu di respons.
+      console.error('Gagal mengirim email OTP:', err?.message || err);
+      console.log(`✉️  [EMAIL GAGAL DIKIRIM] Tujuan: ${email} | Kode OTP registrasi: ${otpCode}`);
+      res.status(200).json({ message: 'Kode verifikasi dibuat, namun pengiriman email gagal. Cek log server untuk kode OTP, atau periksa kredensial EMAIL_USER/EMAIL_PASS di .env.' });
     }
   });
 

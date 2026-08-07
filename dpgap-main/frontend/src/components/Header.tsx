@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Menu, Download, ShieldCheck, FileSpreadsheet, FileText, ChevronDown, ArrowLeft, FolderOpen } from 'lucide-react';
-import { User, Assessment } from '../types';
+import { User, Assessment } from '../../../shared/types';
 
 interface HeaderProps {
   currentUser: User | null;

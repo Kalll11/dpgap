@@ -13,7 +13,17 @@ function getAuthHeaders(): Record<string, string> {
   return headers;
 }
 
-async function handleResponse<T>(res: Response, defaultErrMsg: string): Promise<T> {
+/**
+ * @param emitUnauthorizedOn401 - Set `false` untuk endpoint auth (login, register, verify-otp,
+ * /auth/me saat init) di mana 401 berarti "kredensial salah" / "belum login" — BUKAN "sesi habis".
+ * Hanya endpoint data terproteksi (assessments, users, dll) yang boleh memicu event global
+ * 'dpgap_auth_unauthorized' + toast "Sesi telah berakhir...".
+ */
+async function handleResponse<T>(
+  res: Response,
+  defaultErrMsg: string,
+  emitUnauthorizedOn401: boolean = true
+): Promise<T> {
   if (!res.ok) {
     let errMsg = defaultErrMsg;
     try {
@@ -29,7 +39,9 @@ async function handleResponse<T>(res: Response, defaultErrMsg: string): Promise<
       // Session expired or invalid
       localStorage.removeItem('dpgap_token');
       localStorage.removeItem('dpgap_user');
-      window.dispatchEvent(new Event('dpgap_auth_unauthorized'));
+      if (emitUnauthorizedOn401) {
+        window.dispatchEvent(new Event('dpgap_auth_unauthorized'));
+      }
     }
 
     throw new Error(errMsg);
@@ -43,7 +55,8 @@ export async function loginUser(email: string, pass: string, captchaToken: strin
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password: pass, captchaToken }),
   });
-  const data = await handleResponse<{ user: User; token: string }>(res, 'Gagal login');
+  // emitUnauthorizedOn401 = false: 401 di sini berarti "email/password salah", bukan sesi habis.
+  const data = await handleResponse<{ user: User; token: string }>(res, 'Gagal login', false);
   if (data.token) {
     localStorage.setItem('dpgap_token', data.token);
     localStorage.setItem('dpgap_user', JSON.stringify(data.user));
@@ -63,7 +76,7 @@ export async function registerUser(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ fullname, employeeId, email, password: pass, role }),
   });
-  return handleResponse<{ message: string }>(res, 'Gagal mendaftar');
+  return handleResponse<{ message: string }>(res, 'Gagal mendaftar', false);
 }
 
 export async function verifyOtpApi(email: string, otp: string): Promise<{ user: User; token: string }> {
@@ -72,7 +85,7 @@ export async function verifyOtpApi(email: string, otp: string): Promise<{ user: 
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, otp }),
   });
-  const data = await handleResponse<{ user: User; token: string }>(res, 'Gagal verifikasi OTP');
+  const data = await handleResponse<{ user: User; token: string }>(res, 'Gagal verifikasi OTP', false);
   if (data.token) {
     localStorage.setItem('dpgap_token', data.token);
     localStorage.setItem('dpgap_user', JSON.stringify(data.user));
@@ -84,7 +97,9 @@ export async function fetchCurrentUser(): Promise<{ user: User }> {
   const res = await fetch(`${API_BASE}/auth/me`, {
     headers: getAuthHeaders(),
   });
-  return handleResponse<{ user: User }>(res, 'Gagal memverifikasi sesi');
+  // emitUnauthorizedOn401 = false: ini pengecekan sesi diam-diam saat app pertama kali dibuka.
+  // 401 di sini normal untuk pengunjung yang belum login — tidak boleh memicu toast "sesi habis".
+  return handleResponse<{ user: User }>(res, 'Gagal memverifikasi sesi', false);
 }
 
 export async function fetchUsers(): Promise<User[]> {
